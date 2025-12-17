@@ -92,16 +92,16 @@ radio.begin(915.0);
 
 ## Critical Architectural Note: IO Expander
 
-⚠️ **IMPORTANT**: The SenseCAP Indicator D1L uses an **IO Expander** (TCA9535 at I2C address 0x40) for SX1262 control pins, NOT direct GPIO pins.
+⚠️ **IMPORTANT**: The SenseCAP Indicator D1L uses an **IO Expander** (TCA9535 at I2C address 0x20) for SX1262 control pins, NOT direct GPIO pins.
 
 ### IO Expander Pin Mapping
 
 | Function | IO Expander Pin | I2C Address |
 |----------|----------------|-------------|
-| LORA_CS  | 0              | 0x40        |
-| LORA_RST | 1              | 0x40        |
-| LORA_BUSY| 2              | 0x40        |
-| LORA_DIO1| 3              | 0x40        |
+| LORA_CS  | 0              | 0x20        |
+| LORA_RST | 1              | 0x20        |
+| LORA_BUSY| 2              | 0x20        |
+| LORA_DIO1| 3              | 0x20        |
 
 The IO expander interrupt line is connected to GPIO 42.
 
@@ -224,7 +224,7 @@ The default environment (`SenseCapIndicator-D1L_comp_radio_usb`) provides a comp
 If you see "SX1262 init failed" errors:
 
 1. Check I2C bus is working (sensors should respond)
-2. Verify IO expander is accessible at 0x40
+2. Verify IO expander is accessible at 0x20
 3. Check that RadioLib supports IO expander pins
 4. Consider implementing custom HAL if needed
 
@@ -233,7 +233,7 @@ If you see "SX1262 init failed" errors:
 The display uses LovyanGFX which has built-in IO expander support. If display fails:
 
 1. Check I2C bus (SDA=39, SCL=40)
-2. Verify IO_EXPANDER is defined as 0x40
+2. Verify TCA9535_I2C_ADDR is defined as 0x20
 3. Check display CS pin (IO expander pin 4)
 
 ### Touch Not Responding
