@@ -109,7 +109,7 @@ private:
      * @param parameter Pointer to CustomRadioLibHal instance
      */
     static void pollTask(void* parameter) {
-        CustomRadioLibHal* hal = (CustomRadioLibHal*)parameter;
+        CustomRadioLibHal* hal = static_cast<CustomRadioLibHal*>(parameter);
 
         Serial.println("[CustomHAL] Polling task started (1ms interval)");
 
@@ -194,7 +194,7 @@ public:
         BaseType_t result = xTaskCreate(
             pollTask,
             "TCA9535Poll",  // Task name
-            2048,           // Stack size (words)
+            2048,           // Stack size (bytes)
             this,           // Task parameter (this HAL instance)
             2,              // Priority (higher than normal tasks)
             &pollTaskHandle
@@ -235,8 +235,9 @@ public:
      */
     void pinMode(uint32_t pin, uint32_t mode) override {
         if (isVirtualPin(pin)) {
-            Serial.printf("[CustomHAL] pinMode virtual pin %d mode %s\n",
-                         pin, mode == OUTPUT ? "OUTPUT" : "INPUT");
+            // Verbose logging disabled for performance - uncomment for debugging:
+            // Serial.printf("[CustomHAL] pinMode virtual pin %d mode %s\n",
+            //              pin, mode == OUTPUT ? "OUTPUT" : "INPUT");
             ioExpander->pinMode(pin, mode);
         } else {
             ArduinoHal::pinMode(pin, mode);

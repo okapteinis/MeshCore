@@ -62,19 +62,21 @@ bool radio_init() {
   // MOSI=48, MISO=47, SCK=41 (direct GPIO)
   spi.begin(LORA_SCK, LORA_MISO, LORA_MOSI);
 
-  Serial.println("==================================================");
-  Serial.println("⚠️  SenseCAP Indicator D1L - IO EXPANDER VARIANT");
-  Serial.println("==================================================");
-  Serial.println("WARNING: This variant requires IO expander HAL support!");
-  Serial.println("The SX1262 control pins are NOT direct GPIO pins.");
-  Serial.println("They are TCA9535 IO expander pins at I2C 0x40.");
-  Serial.println("");
-  Serial.println("Expected behavior: Radio init will FAIL unless you have");
-  Serial.println("implemented custom HAL for IO expander support.");
-  Serial.println("");
-  Serial.println("See PIN_RESEARCH.md and README.md for details.");
-  Serial.println("==================================================");
-  Serial.println("");
+  Serial.print(R"(
+==================================================
+⚠️  SenseCAP Indicator D1L - IO EXPANDER VARIANT
+==================================================
+WARNING: This variant requires IO expander HAL support!
+The SX1262 control pins are NOT direct GPIO pins.
+They are TCA9535 IO expander pins at I2C 0x20.
+
+Expected behavior: Radio init will FAIL unless you have
+implemented custom HAL for IO expander support.
+
+See PIN_RESEARCH.md and README.md for details.
+==================================================
+
+)");
 
   Serial.println("Initializing SX1262 on SenseCAP Indicator D1L...");
   Serial.printf("  SPI: SCK=%d, MISO=%d, MOSI=%d (direct GPIO)\n", LORA_SCK, LORA_MISO, LORA_MOSI);
@@ -99,9 +101,10 @@ bool radio_init() {
 
   if (state != RADIOLIB_ERR_NONE) {
     Serial.printf("❌ SX1262 init failed: %d (EXPECTED without HAL)\n", state);
-    Serial.println("This is expected behavior. To fix:");
-    Serial.println("1. Implement TCA9535 IO expander HAL, OR");
-    Serial.println("2. Use Meshtastic's custom Arduino framework");
+    Serial.print(R"(This is expected behavior. To fix:
+1. Implement TCA9535 IO expander HAL, OR
+2. Use Meshtastic's custom Arduino framework
+)");
     return false;
   }
 

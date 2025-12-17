@@ -47,7 +47,8 @@ private:
     uint8_t i2cAddress;      // I2C address of TCA9535
     bool initialized;        // Initialization state
 
-    // Pin state cache to minimize I2C transactions
+    // Pin state cache for status reporting and debugging
+    // Note: Current implementation still performs I2C operations on each call
     uint16_t outputCache;    // Cached output states
     uint16_t directionCache; // Cached direction states
 
