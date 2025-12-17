@@ -3,6 +3,23 @@
 
 // SenseCAP Indicator D1L Implementation
 // Author: MeshCore Community / Latvian community at apraide.lv
+//
+// ⚠️ CRITICAL WARNING ⚠️
+// This variant is NON-FUNCTIONAL without custom IO expander HAL implementation.
+// The SX1262 control pins (CS, RST, BUSY, DIO1) are connected via TCA9535 IO expander
+// at I2C address 0x40, NOT direct GPIO pins. Standard RadioLib will interpret these
+// as invalid GPIO numbers and fail initialization.
+//
+// REQUIRED TO MAKE THIS WORK:
+// 1. Implement custom Arduino HAL with TCA9535 support (like Meshtastic does), OR
+// 2. Implement RadioLib custom HAL to intercept pinMode/digitalWrite/digitalRead
+//    and route IO expander pins through I2C, OR
+// 3. Use Meshtastic's custom Arduino framework fork
+//
+// This code serves as a REFERENCE IMPLEMENTATION documenting the correct pin
+// configuration. Actual functionality requires the HAL work described above.
+//
+// See PIN_RESEARCH.md for details.
 
 ESP32Board board;
 
@@ -10,14 +27,14 @@ ESP32Board board;
 static SPIClass spi;
 
 // SX1262 Module configuration
-// NOTE: The pins CS, DIO1, RST, and BUSY are on the IO Expander
-// This requires HAL support for IO expander GPIO operations
-// Pin format: (expander_pin | IO_EXPANDER) where IO_EXPANDER is the I2C address
+// Pin definitions: (expander_pin | IO_EXPANDER) where IO_EXPANDER = 0x40
+// These resolve to integers like 0x40, 0x41, 0x42, 0x43 which are NOT valid GPIO pins.
+// Without IO expander HAL, RadioLib will attempt to use these as GPIO numbers and fail.
 SX1262 radio = new Module(
-  LORA_CS,      // CS   - IO Expander pin 0
-  LORA_DIO1,    // DIO1 - IO Expander pin 3 (IRQ)
-  LORA_RST,     // RST  - IO Expander pin 1
-  LORA_BUSY,    // BUSY - IO Expander pin 2
+  LORA_CS,      // (0 | 0x40) = 0x40 - NOT a valid GPIO, needs HAL
+  LORA_DIO1,    // (3 | 0x40) = 0x43 - NOT a valid GPIO, needs HAL
+  LORA_RST,     // (1 | 0x40) = 0x41 - NOT a valid GPIO, needs HAL
+  LORA_BUSY,    // (2 | 0x40) = 0x42 - NOT a valid GPIO, needs HAL
   spi
 );
 
@@ -45,13 +62,32 @@ bool radio_init() {
   // MOSI=48, MISO=47, SCK=41 (direct GPIO)
   spi.begin(LORA_SCK, LORA_MISO, LORA_MOSI);
 
+  Serial.println("==================================================");
+  Serial.println("⚠️  SenseCAP Indicator D1L - IO EXPANDER VARIANT");
+  Serial.println("==================================================");
+  Serial.println("WARNING: This variant requires IO expander HAL support!");
+  Serial.println("The SX1262 control pins are NOT direct GPIO pins.");
+  Serial.println("They are TCA9535 IO expander pins at I2C 0x40.");
+  Serial.println("");
+  Serial.println("Expected behavior: Radio init will FAIL unless you have");
+  Serial.println("implemented custom HAL for IO expander support.");
+  Serial.println("");
+  Serial.println("See PIN_RESEARCH.md and README.md for details.");
+  Serial.println("==================================================");
+  Serial.println("");
+
   Serial.println("Initializing SX1262 on SenseCAP Indicator D1L...");
-  Serial.printf("  SPI: SCK=%d, MISO=%d, MOSI=%d\n", LORA_SCK, LORA_MISO, LORA_MOSI);
-  Serial.printf("  CS=%d, DIO1=%d, RST=%d, BUSY=%d\n", LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY);
-  Serial.printf("  IO_EXPANDER=0x%02X, IRQ=%d\n", IO_EXPANDER, IO_EXPANDER_IRQ);
+  Serial.printf("  SPI: SCK=%d, MISO=%d, MOSI=%d (direct GPIO)\n", LORA_SCK, LORA_MISO, LORA_MOSI);
+  Serial.printf("  CS=0x%02X, DIO1=0x%02X, RST=0x%02X, BUSY=0x%02X (IO expander - NOT GPIO!)\n",
+                LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY);
+  Serial.printf("  IO_EXPANDER=0x%02X (I2C address), IRQ=%d\n", IO_EXPANDER, IO_EXPANDER_IRQ);
+  Serial.println("");
 
   // Initialize radio using RadioLibRadio wrapper
-  // This will call radio.begin() internally
+  // ⚠️ THIS WILL FAIL without IO expander HAL support
+  // RadioLib will try to use CS=0x40, RST=0x41, etc. as GPIO pin numbers,
+  // which don't exist on ESP32-S3, causing pinMode() to fail.
+  Serial.println("Attempting radio.begin() (will likely fail without HAL)...");
   int state = radio.begin(
     LORA_FREQ,  // frequency in MHz
     LORA_BW,    // bandwidth in kHz
@@ -62,7 +98,10 @@ bool radio_init() {
   );
 
   if (state != RADIOLIB_ERR_NONE) {
-    Serial.printf("SX1262 init failed: %d\n", state);
+    Serial.printf("❌ SX1262 init failed: %d (EXPECTED without HAL)\n", state);
+    Serial.println("This is expected behavior. To fix:");
+    Serial.println("1. Implement TCA9535 IO expander HAL, OR");
+    Serial.println("2. Use Meshtastic's custom Arduino framework");
     return false;
   }
 
