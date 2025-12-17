@@ -265,6 +265,83 @@ We will proceed with creating the variant following the Meshtastic pattern (Path
 5. Implement IO expander HAL if needed
 
 ---
+
+## Code Review Findings (PR #1)
+
+### Review by Gemini Code Assist (Review ID: 3589217032)
+
+The initial implementation received critical feedback identifying fundamental issues:
+
+**Critical Issues Identified:**
+
+1. **IO Expander Pin Configuration Won't Work**
+   - The `(pin | IO_EXPANDER)` pattern creates integer values (0x40, 0x41, 0x42, 0x43)
+   - Standard RadioLib interprets these as GPIO pin numbers
+   - ESP32-S3 doesn't have GPIOs 0x40-0x43, so pinMode() will fail
+   - **Verdict**: Non-functional without custom HAL implementation
+
+2. **Touch Controller Configuration Mismatch**
+   - Documentation mentioned IO expander pins 6 and 7 for touch interrupt/reset
+   - Driver code sets these as `GPIO_NUM_NC` (not connected)
+   - **Resolution**: Clarified that driver uses I2C polling mode instead of interrupt mode
+   - This is inherited from sensecap_indicator-espnow variant and is intentional
+
+3. **Code Clarity Issues**
+   - Needed explicit warnings that variant is non-functional
+   - Required clearer documentation of HAL requirements
+
+### Actions Taken (2025-12-17)
+
+✅ **Added Critical Warnings**
+- Updated target.cpp with prominent warning comments
+- Added runtime serial output warning about expected failure
+- Clarified that code is a REFERENCE IMPLEMENTATION
+
+✅ **Updated Documentation**
+- Added non-functional warning to README.md
+- Explained touch controller polling mode vs interrupt mode
+- Documented HAL implementation requirements clearly
+
+✅ **Clarified Intent**
+- Code now explicitly states it won't work without HAL
+- Provides clear guidance on what's needed to make it functional
+- Maintains correct pin documentation for future HAL development
+
+### Current Status
+
+**Compilation**: Should compile successfully ✅
+**Functionality**: WILL NOT WORK - radio init will fail ❌
+**Purpose**: Reference implementation documenting correct pin configuration ✅
+
+**This variant is intentionally kept as a reference implementation** because:
+1. It documents the correct hardware pin configuration from authoritative sources
+2. It serves as a starting point for HAL implementation work
+3. It demonstrates what needs to be done to support IO expander-based LoRa devices
+4. Removing it would lose valuable research and documentation
+
+### Path Forward
+
+To make this variant functional, contributors need to:
+
+1. **Option A: Custom Arduino HAL** (Recommended - Meshtastic's approach)
+   - Fork Arduino-ESP32 framework
+   - Add TCA9535 IO expander support to HAL GPIO functions
+   - Modify pinMode(), digitalWrite(), digitalRead() to detect IO_EXPANDER flag
+   - Route IO expander pins through I2C communication
+   - Update platformio.ini to use custom framework
+
+2. **Option B: RadioLib Custom HAL**
+   - Implement RadioLib HAL override using RADIOLIB_GODMODE
+   - Create custom pin control functions
+   - Intercept GPIO operations and route to IO expander
+   - More complex, less maintainable than Option A
+
+3. **Option C: Direct Implementation**
+   - Manually initialize TCA9535 in radio_init()
+   - Implement wrapper functions for pin control
+   - Less elegant but more self-contained
+
+---
 *Research and Implementation completed: 2025-12-17*
-*All Phases of MeshCore SenseCAP Indicator D1L Support*
-*Status: Ready for hardware testing*
+*Code Review addressed: 2025-12-17*
+*Status: Reference implementation - Non-functional without HAL*

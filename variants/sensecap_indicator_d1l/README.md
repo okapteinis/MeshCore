@@ -1,5 +1,22 @@
 # SenseCAP Indicator D1L - MeshCore Variant
 
+## ⚠️ **CRITICAL: NON-FUNCTIONAL WITHOUT HAL IMPLEMENTATION** ⚠️
+
+**THIS VARIANT WILL NOT WORK OUT OF THE BOX**
+
+The SenseCAP Indicator D1L uses a TCA9535 IO expander chip for SX1262 radio control pins. Standard RadioLib and Arduino GPIO functions DO NOT support IO expander pins. This variant will compile but **radio initialization will fail**.
+
+**To make this work, you must:**
+1. Implement custom Arduino HAL with TCA9535 support (like Meshtastic does), OR
+2. Implement RadioLib custom HAL to intercept GPIO operations, OR
+3. Use Meshtastic's custom Arduino framework fork
+
+**This code serves as a REFERENCE IMPLEMENTATION** documenting the correct pin configuration for future HAL development.
+
+See **Critical Architectural Note** section below and `PIN_RESEARCH.md` for details.
+
+---
+
 ## Overview
 
 This variant adds support for the **Seeed Studio SenseCAP Indicator D1L** to MeshCore. The D1L features an ESP32-S3 with an optional Semtech SX1262 LoRa radio.
@@ -168,8 +185,11 @@ The display uses LovyanGFX which has built-in IO expander support. If display fa
 Touchscreen is at I2C address 0x48:
 
 1. Scan I2C bus for device
-2. Check touch interrupt (IO expander pin 6)
-3. Verify touch reset (IO expander pin 7)
+2. Touch interrupt and reset pins are set to `GPIO_NUM_NC` (not connected)
+   - Hardware has these on IO expander pins 6 and 7
+   - Driver uses I2C polling mode instead of interrupt mode
+   - This is inherited from sensecap_indicator-espnow variant
+   - To use interrupt mode, would need to implement IO expander pin support
 
 ## Development Notes
 
