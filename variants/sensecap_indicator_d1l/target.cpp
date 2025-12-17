@@ -82,7 +82,11 @@ See PIN_RESEARCH.md and README.md for details.
   Serial.printf("  SPI: SCK=%d, MISO=%d, MOSI=%d (direct GPIO)\n", LORA_SCK, LORA_MISO, LORA_MOSI);
   Serial.printf("  CS=0x%02X, DIO1=0x%02X, RST=0x%02X, BUSY=0x%02X (IO expander - NOT GPIO!)\n",
                 LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY);
+#ifdef USE_CUSTOM_RADIOLIB_HAL
+  Serial.printf("  TCA9535 I2C address=0x%02X\n", TCA9535_I2C_ADDR);
+#else
   Serial.printf("  IO_EXPANDER=0x%02X (I2C address), IRQ=%d\n", IO_EXPANDER, IO_EXPANDER_IRQ);
+#endif
   Serial.println("");
 
   // Initialize radio using RadioLibRadio wrapper

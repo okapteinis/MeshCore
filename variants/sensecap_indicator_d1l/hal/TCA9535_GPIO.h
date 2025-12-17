@@ -47,8 +47,8 @@ private:
     uint8_t i2cAddress;      // I2C address of TCA9535
     bool initialized;        // Initialization state
 
-    // Pin state cache for status reporting and debugging
-    // Note: Current implementation still performs I2C operations on each call
+    // Pin state cache to minimize I2C transactions
+    // digitalWrite checks cache and skips I2C write if state unchanged
     uint16_t outputCache;    // Cached output states
     uint16_t directionCache; // Cached direction states
 
@@ -173,6 +173,7 @@ public:
      * Write digital value to pin
      *
      * Pin must be configured as OUTPUT first using pinMode().
+     * Uses cache to skip I2C write if pin state hasn't changed.
      *
      * @param pin Virtual pin number (100-115)
      * @param value HIGH (1) or LOW (0)
@@ -186,14 +187,24 @@ public:
         uint8_t physPin = virtualToPhysical(pin);
         if (physPin == 0xFF) return;
 
+        // Check cache - skip I2C write if state unchanged
+        uint16_t pinMask = (1 << physPin);
+        bool currentState = (outputCache & pinMask) != 0;
+        bool newState = (value == HIGH);
+
+        if (currentState == newState) {
+            // Pin already in requested state, skip I2C transaction
+            return;
+        }
+
         // Write to TCA9535
         ioExpander.write1(physPin, value);
 
         // Update output cache
         if (value == HIGH) {
-            outputCache |= (1 << physPin);
+            outputCache |= pinMask;
         } else {
-            outputCache &= ~(1 << physPin);
+            outputCache &= ~pinMask;
         }
 
         // Verbose logging only for debugging - comment out in production
