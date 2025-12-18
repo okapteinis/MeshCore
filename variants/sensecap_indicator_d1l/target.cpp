@@ -11,8 +11,8 @@
 #endif
 
 // RNG includes
-#include <helpers/StdRNG.h>
-#include <helpers/RadioNoiseListener.h>
+#include <helpers/ArduinoHelpers.h>
+#include <helpers/radiolib/RadioLibWrappers.h>
 
 // Configuration Constants (Replace Magic Numbers)
 namespace Config {
