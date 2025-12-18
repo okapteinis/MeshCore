@@ -3,8 +3,7 @@
 
 #include <RadioLib.h>
 #include "TCA9535_GPIO.h"
-
-// Note: SemaphoreLockGuard is defined in TCA9535_GPIO.h
+#include "freertos_util.h"
 
 /**
  * Custom RadioLib HAL for TCA9535 I/O Expander
