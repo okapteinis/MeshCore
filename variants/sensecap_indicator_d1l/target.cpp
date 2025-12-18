@@ -148,6 +148,29 @@ bool testMapAccess() {
 // ============================================================================
 
 bool radio_init() {
+  // ===== EARLY BOOT DIAGNOSTICS =====
+  Serial.begin(115200);
+  delay(100);
+  Serial.println("\n\n========================================");
+  Serial.println("=== SENSECAP D1L BOOT DIAGNOSTICS ===");
+  Serial.println("========================================");
+  Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
+  Serial.printf("PSRAM size: %u bytes\n", ESP.getPsramSize());
+  Serial.printf("PSRAM free: %u bytes\n", ESP.getFreePsram());
+
+  if (ESP.getPsramSize() == 0) {
+    Serial.println("❌ CRITICAL ERROR: PSRAM NOT DETECTED!");
+    Serial.println("Display initialization will FAIL!");
+    Serial.println("Check platformio.ini PSRAM flags!");
+  } else {
+    Serial.printf("✅ PSRAM detected: %.2f MB\n", ESP.getPsramSize() / 1024.0 / 1024.0);
+  }
+
+  Serial.printf("CPU Freq: %u MHz\n", ESP.getCpuFreqMHz());
+  Serial.printf("Flash size: %u bytes\n", ESP.getFlashChipSize());
+  Serial.println("========================================\n");
+  // ===== END EARLY DIAGNOSTICS =====
+
   // ===== Phase 0A: Storage Infrastructure Test =====
   Serial.println("\n========================================");
   Serial.println("Phase 0A: SPIFFS Storage Test");
@@ -156,6 +179,7 @@ bool radio_init() {
   if (!initStorage()) {
     Serial.println("⚠️  SPIFFS initialization failed - continuing anyway");
   } else {
+    Serial.println("✅ SPIFFS initialized successfully");
     testMapAccess();  // Test map file (expected to fail until filesystem is uploaded)
   }
 
@@ -168,7 +192,9 @@ bool radio_init() {
 
   // Initialize SPI bus with explicit pins
   // MOSI=48, MISO=47, SCK=41 (direct GPIO)
+  Serial.println("\n=== Initializing SPI Bus ===");
   spi.begin(LORA_SCK, LORA_MISO, LORA_MOSI);
+  Serial.printf("✅ SPI initialized: SCK=%d, MISO=%d, MOSI=%d\n", LORA_SCK, LORA_MISO, LORA_MOSI);
 
   Serial.print(R"(
 ==================================================
@@ -201,6 +227,7 @@ See PIN_RESEARCH.md and README.md for details.
   // ⚠️ THIS WILL FAIL without IO expander HAL support
   // RadioLib will try to use CS=0x40, RST=0x41, etc. as GPIO pin numbers,
   // which don't exist on ESP32-S3, causing pinMode() to fail.
+  Serial.println("\n=== Initializing SX1262 Radio ===");
   Serial.println("Attempting radio.begin() (will likely fail without HAL)...");
   int state = radio.begin(
     LORA_FREQ,  // frequency in MHz
@@ -217,6 +244,7 @@ See PIN_RESEARCH.md and README.md for details.
 1. Implement TCA9535 IO expander HAL, OR
 2. Use Meshtastic's custom Arduino framework
 )");
+    Serial.println("=== BOOT FAILED ===\n");
     return false;
   }
 
@@ -233,7 +261,8 @@ See PIN_RESEARCH.md and README.md for details.
   radio.setCurrentLimit(SX126X_CURRENT_LIMIT);
   #endif
 
-  Serial.println("SX1262 initialized successfully");
+  Serial.println("✅ SX1262 initialized successfully");
+  Serial.println("=== BOOT COMPLETE ===\n");
   return true;
 }
 
