@@ -34,6 +34,10 @@ extern DISPLAY_CLASS display;
 extern MomentaryButton user_btn;
 #endif
 
+// Storage interface functions (Phase 0A)
+bool initStorage();
+bool testMapAccess();
+
 // Radio interface functions
 bool radio_init();
 uint32_t radio_get_rng_seed();
