@@ -1,5 +1,7 @@
 #pragma once
 
+#include <esp_log.h>
+#include <ESP.h>
 #include <helpers/ui/LGFXDisplay.h>
 
 #define LGFX_USE_V1
@@ -37,10 +39,41 @@ public:
 
     {
         auto cfg = _panel_instance.config_detail();
-        cfg.pin_cs = 4 | IO_EXPANDER;
+        cfg.pin_cs = 4;
         cfg.pin_sclk = 41;
         cfg.pin_mosi = 48;
-        cfg.use_psram = 1;
+
+        // PSRAM Runtime Detection
+        size_t psram_size = ESP.getPsramSize();
+        size_t psram_free = ESP.getFreePsram();
+
+        if (psram_size == 0) {
+          log_e("CRITICAL: PSRAM not detected!");
+          log_e("Display framebuffer needs 460KB, internal RAM has 327KB");
+          log_e("Using fallback: 240x240 resolution");
+
+          cfg.use_psram = 0;
+
+          auto panel_cfg = _panel_instance.config();
+          panel_cfg.panel_width = 240;
+          panel_cfg.panel_height = 240;
+          panel_cfg.memory_width = 240;
+          panel_cfg.memory_height = 240;
+          _panel_instance.config(panel_cfg);
+
+          log_w("Display: 240x240 fallback mode (no PSRAM)");
+        } else {
+          cfg.use_psram = 1;
+
+          const size_t required = 460800;
+          if (psram_free < required) {
+            log_w("Low PSRAM: %u bytes free (need %u)", psram_free, required);
+          } else {
+            log_i("PSRAM OK: %u KB total, %u KB free",
+                  psram_size / 1024, psram_free / 1024);
+          }
+        }
+
         _panel_instance.config_detail(cfg);
     }
 
