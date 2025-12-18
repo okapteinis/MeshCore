@@ -4,6 +4,8 @@
 #include <RadioLib.h>
 #include "TCA9535_GPIO.h"
 
+// Note: SemaphoreLockGuard is defined in TCA9535_GPIO.h
+
 /**
  * Custom RadioLib HAL for TCA9535 I/O Expander
  *
@@ -282,13 +284,8 @@ public:
             // Verbose logging disabled for performance - uncomment for debugging:
             // Serial.printf("[CustomHAL] pinMode virtual pin %d mode %s\n",
             //              pin, mode == OUTPUT ? "OUTPUT" : "INPUT");
-            if (i2cMutex != NULL) {
-                xSemaphoreTake(i2cMutex, portMAX_DELAY);
-            }
+            SemaphoreLockGuard lock(i2cMutex);  // RAII guard
             ioExpander->pinMode(pin, mode);
-            if (i2cMutex != NULL) {
-                xSemaphoreGive(i2cMutex);
-            }
         } else {
             ArduinoHal::pinMode(pin, mode);
         }
@@ -305,13 +302,8 @@ public:
             // Verbose logging disabled for performance - uncomment for debugging:
             // Serial.printf("[CustomHAL] digitalWrite virtual pin %d = %s\n",
             //              pin, value ? "HIGH" : "LOW");
-            if (i2cMutex != NULL) {
-                xSemaphoreTake(i2cMutex, portMAX_DELAY);
-            }
+            SemaphoreLockGuard lock(i2cMutex);  // RAII guard
             ioExpander->digitalWrite(pin, value);
-            if (i2cMutex != NULL) {
-                xSemaphoreGive(i2cMutex);
-            }
         } else {
             ArduinoHal::digitalWrite(pin, value);
         }
@@ -325,14 +317,8 @@ public:
      */
     uint32_t digitalRead(uint32_t pin) override {
         if (isVirtualPin(pin)) {
-            uint32_t value;
-            if (i2cMutex != NULL) {
-                xSemaphoreTake(i2cMutex, portMAX_DELAY);
-            }
-            value = ioExpander->digitalRead(pin);
-            if (i2cMutex != NULL) {
-                xSemaphoreGive(i2cMutex);
-            }
+            SemaphoreLockGuard lock(i2cMutex);  // RAII guard
+            uint32_t value = ioExpander->digitalRead(pin);
             // Verbose logging disabled for performance - uncomment for debugging:
             // Serial.printf("[CustomHAL] digitalRead virtual pin %d = %s\n",
             //              pin, value ? "HIGH" : "LOW");
