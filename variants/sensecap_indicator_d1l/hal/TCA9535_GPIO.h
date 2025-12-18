@@ -4,37 +4,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <TCA9555.h>
-#include <freertos/semphr.h>
-
-/**
- * RAII Lock Guard for FreeRTOS Semaphore
- *
- * Automatically acquires semaphore on construction and releases on destruction.
- * Ensures mutex is always released even on early returns or exceptions.
- */
-class SemaphoreLockGuard {
-private:
-    SemaphoreHandle_t& mutex;
-    bool locked;
-
-public:
-    explicit SemaphoreLockGuard(SemaphoreHandle_t& m) : mutex(m), locked(false) {
-        if (mutex != NULL) {
-            xSemaphoreTake(mutex, portMAX_DELAY);
-            locked = true;
-        }
-    }
-
-    ~SemaphoreLockGuard() {
-        if (locked && mutex != NULL) {
-            xSemaphoreGive(mutex);
-        }
-    }
-
-    // Prevent copying
-    SemaphoreLockGuard(const SemaphoreLockGuard&) = delete;
-    SemaphoreLockGuard& operator=(const SemaphoreLockGuard&) = delete;
-};
+#include "freertos_util.h"
 
 /**
  * TCA9535 I/O Expander GPIO Wrapper for MeshCore
