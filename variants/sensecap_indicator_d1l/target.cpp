@@ -78,9 +78,9 @@ bool initStorage() {
   size_t usedBytes = SPIFFS.usedBytes();
   size_t freeBytes = totalBytes - usedBytes;
 
-  Serial.printf("Total space: %u bytes (%.2f MB)\n", totalBytes, totalBytes / 1024.0 / 1024.0);
-  Serial.printf("Used space:  %u bytes (%.2f MB)\n", usedBytes, usedBytes / 1024.0 / 1024.0);
-  Serial.printf("Free space:  %u bytes (%.2f MB)\n", freeBytes, freeBytes / 1024.0 / 1024.0);
+  Serial.printf("Total space: %zu bytes (%.2f MB)\n", totalBytes, totalBytes / 1024.0 / 1024.0);
+  Serial.printf("Used space:  %zu bytes (%.2f MB)\n", usedBytes, usedBytes / 1024.0 / 1024.0);
+  Serial.printf("Free space:  %zu bytes (%.2f MB)\n", freeBytes, freeBytes / 1024.0 / 1024.0);
   Serial.println("=================================\n");
 
   return true;
@@ -116,19 +116,23 @@ bool testMapAccess() {
 
   size_t fileSize = mapFile.size();
   Serial.printf("✅ Map file found: %s\n", mapPath);
-  Serial.printf("File size: %u bytes (%.2f KB)\n", fileSize, fileSize / 1024.0);
+  Serial.printf("File size: %zu bytes (%.2f KB)\n", fileSize, fileSize / 1024.0);
 
   // Read first few bytes to verify it's a JPEG
   uint8_t header[3];
-  mapFile.read(header, 3);
+  size_t bytesRead = mapFile.read(header, sizeof(header));
   mapFile.close();
 
-  if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
+  if (bytesRead == sizeof(header) && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
     Serial.println("✅ Valid JPEG header detected");
     Serial.println("================================\n");
     return true;
   } else {
-    Serial.printf("⚠️  Invalid JPEG header: %02X %02X %02X\n", header[0], header[1], header[2]);
+    if (bytesRead < sizeof(header)) {
+      Serial.printf("⚠️  File too small: only %zu bytes read (expected %zu)\n", bytesRead, sizeof(header));
+    } else {
+      Serial.printf("⚠️  Invalid JPEG header: %02X %02X %02X\n", header[0], header[1], header[2]);
+    }
     Serial.println("Expected: FF D8 FF");
     Serial.println("================================\n");
     return false;

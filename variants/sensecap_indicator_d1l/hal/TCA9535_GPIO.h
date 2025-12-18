@@ -233,10 +233,14 @@ public:
             return;  // Lock guard automatically releases mutex
         }
 
-        // Write to TCA9535
-        ioExpander.write1(physPin, value);
+        // Write to TCA9535 and verify success
+        if (!ioExpander.write1(physPin, value)) {
+            Serial.printf("[TCA9535] ERROR: I2C write failed on pin %d\n", pin);
+            // Lock guard automatically releases mutex when function exits
+            return;  // Don't update cache if hardware write failed
+        }
 
-        // Update output cache
+        // Update output cache only on successful write
         if (value == HIGH) {
             outputCache |= pinMask;
         } else {
