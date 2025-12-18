@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "target.h"
 #include <SPIFFS.h>
+#include <helpers/radiolib/CustomSX1262.h>
 
 // SenseCAP Indicator D1L Implementation
 // Author: MeshCore Community / Latvian community at apraide.lv
@@ -27,19 +28,18 @@ ESP32Board board;
 // SPI instance for LoRa radio
 static SPIClass spi;
 
-// SX1262 Module configuration
-// Pin definitions: (expander_pin | IO_EXPANDER) where IO_EXPANDER = 0x40
-// These resolve to integers like 0x40, 0x41, 0x42, 0x43 which are NOT valid GPIO pins.
-// Without IO expander HAL, RadioLib will attempt to use these as GPIO numbers and fail.
-SX1262 radio = new Module(
-  LORA_CS,      // (0 | 0x40) = 0x40 - NOT a valid GPIO, needs HAL
-  LORA_DIO1,    // (3 | 0x40) = 0x43 - NOT a valid GPIO, needs HAL
-  LORA_RST,     // (1 | 0x40) = 0x41 - NOT a valid GPIO, needs HAL
-  LORA_BUSY,    // (2 | 0x40) = 0x42 - NOT a valid GPIO, needs HAL
+// CustomSX1262 Module configuration
+// Pin definitions: LORA_CS, LORA_RST, LORA_BUSY, LORA_DIO1
+// These are virtual pins (100-103) mapped to TCA9535 I/O expander pins
+CustomSX1262 radio = new Module(
+  LORA_CS,      // Virtual pin 100 -> TCA9535 pin 0
+  LORA_DIO1,    // Virtual pin 103 -> TCA9535 pin 3
+  LORA_RST,     // Virtual pin 101 -> TCA9535 pin 1
+  LORA_BUSY,    // Virtual pin 102 -> TCA9535 pin 2
   spi
 );
 
-RadioLibRadio<SX1262> radio_driver(radio, board);
+CustomSX1262Wrapper radio_driver(radio, board);
 
 ESP32RTCClock fallback_clock;
 AutoDiscoverRTCClock rtc_clock(fallback_clock);
@@ -234,13 +234,7 @@ See PIN_RESEARCH.md and README.md for details.
 }
 
 uint32_t radio_get_rng_seed() {
-  // Try to get random seed from radio
-  uint32_t seed = radio.random();
-  if (seed == 0) {
-    // Fallback to ESP32 hardware RNG
-    seed = esp_random();
-  }
-  return seed;
+  return radio.random(0x7FFFFFFF);
 }
 
 void radio_set_params(float freq, float bw, uint8_t sf, uint8_t cr) {
@@ -255,15 +249,6 @@ void radio_set_tx_power(uint8_t dbm) {
 }
 
 mesh::LocalIdentity radio_new_identity() {
-  // Generate identity from ESP32 MAC address
-  uint8_t mac[6];
-  esp_read_mac(mac, ESP_MAC_WIFI_STA);
-
-  // Combine MAC bytes to create seed
-  uint64_t seed = 0;
-  for (int i = 0; i < 6; i++) {
-    seed = (seed << 8) | mac[i];
-  }
-
-  return mesh::LocalIdentity::generate_from_seed(seed);
+  RadioNoiseListener rng(radio);
+  return mesh::LocalIdentity(&rng);  // create new random identity
 }

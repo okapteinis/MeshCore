@@ -11,7 +11,8 @@
 #define RADIOLIB_STATIC_ONLY 1
 #include <RadioLib.h>
 #include <helpers/ESP32Board.h>
-#include <helpers/radiolib/RadioLibRadio.h>
+#include <helpers/radiolib/RadioLibWrappers.h>
+#include <helpers/radiolib/CustomSX1262Wrapper.h>
 #include <helpers/AutoDiscoverRTCClock.h>
 #include <helpers/SensorManager.h>
 #include <helpers/sensors/EnvironmentSensorManager.h>
@@ -23,8 +24,7 @@
 
 // Global objects
 extern ESP32Board board;
-extern SX1262 radio;
-extern RadioLibRadio<SX1262> radio_driver;
+extern WRAPPER_CLASS radio_driver;
 extern ESP32RTCClock fallback_clock;
 extern AutoDiscoverRTCClock rtc_clock;
 extern EnvironmentSensorManager sensors;
