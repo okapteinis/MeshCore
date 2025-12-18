@@ -3,6 +3,10 @@
 #include <SPIFFS.h>
 #include <helpers/radiolib/CustomSX1262.h>
 
+// JPEG file format constants
+static const uint8_t JPEG_MAGIC_HEADER[] = {0xFF, 0xD8, 0xFF};
+static const size_t JPEG_MAGIC_HEADER_SIZE = sizeof(JPEG_MAGIC_HEADER);
+
 // SenseCAP Indicator D1L Implementation
 // Author: MeshCore Community / Latvian community at apraide.lv
 //
@@ -119,17 +123,17 @@ bool testMapAccess() {
   Serial.printf("File size: %zu bytes (%.2f KB)\n", fileSize, fileSize / 1024.0);
 
   // Read first few bytes to verify it's a JPEG
-  uint8_t header[3];
+  uint8_t header[JPEG_MAGIC_HEADER_SIZE];
   size_t bytesRead = mapFile.read(header, sizeof(header));
   mapFile.close();
 
-  if (bytesRead == sizeof(header) && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
+  if (bytesRead == JPEG_MAGIC_HEADER_SIZE && memcmp(header, JPEG_MAGIC_HEADER, JPEG_MAGIC_HEADER_SIZE) == 0) {
     Serial.println("✅ Valid JPEG header detected");
     Serial.println("================================\n");
     return true;
   } else {
-    if (bytesRead < sizeof(header)) {
-      Serial.printf("⚠️  File too small: only %zu bytes read (expected %zu)\n", bytesRead, sizeof(header));
+    if (bytesRead < JPEG_MAGIC_HEADER_SIZE) {
+      Serial.printf("⚠️  File too small: only %zu bytes read (expected %zu)\n", bytesRead, JPEG_MAGIC_HEADER_SIZE);
     } else {
       Serial.printf("⚠️  Invalid JPEG header: %02X %02X %02X\n", header[0], header[1], header[2]);
     }
@@ -234,7 +238,12 @@ See PIN_RESEARCH.md and README.md for details.
 }
 
 uint32_t radio_get_rng_seed() {
-  return radio.random(0x7FFFFFFF);
+  uint32_t seed = radio.random(0x7FFFFFFF);
+  // Fallback to esp_random() if radio returns 0 (problematic for RNG systems)
+  if (seed == 0) {
+    seed = esp_random();
+  }
+  return seed;
 }
 
 void radio_set_params(float freq, float bw, uint8_t sf, uint8_t cr) {

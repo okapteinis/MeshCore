@@ -68,7 +68,7 @@ private:
         if (virtualPin >= 100 && virtualPin < 116) {
             return virtualPin - 100;
         }
-        Serial.printf("[TCA9535] ERROR: Invalid virtual pin %d (valid range: 100-115)\n", virtualPin);
+        Serial.printf("[TCA9535] ERROR: Invalid virtual pin %u (valid range: 100-115)\n", virtualPin);
         return 0xFF; // Invalid
     }
 
@@ -235,7 +235,7 @@ public:
 
         // Write to TCA9535 and verify success
         if (!ioExpander.write1(physPin, value)) {
-            Serial.printf("[TCA9535] ERROR: I2C write failed on pin %d\n", pin);
+            Serial.printf("[TCA9535] ERROR: I2C write failed on pin %u\n", pin);
             // Lock guard automatically releases mutex when function exits
             return;  // Don't update cache if hardware write failed
         }
