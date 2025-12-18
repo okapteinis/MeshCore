@@ -51,9 +51,10 @@ public:
      * Destructor - releases semaphore
      *
      * Only releases if semaphore was successfully acquired in constructor.
+     * Note: locked==true guarantees mutex is valid (checked in constructor).
      */
     ~SemaphoreLockGuard() {
-        if (locked && mutex != NULL) {
+        if (locked) {
             xSemaphoreGive(mutex);
         }
     }
