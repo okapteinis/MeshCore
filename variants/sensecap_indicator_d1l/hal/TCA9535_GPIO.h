@@ -7,6 +7,36 @@
 #include <freertos/semphr.h>
 
 /**
+ * RAII Lock Guard for FreeRTOS Semaphore
+ *
+ * Automatically acquires semaphore on construction and releases on destruction.
+ * Ensures mutex is always released even on early returns or exceptions.
+ */
+class SemaphoreLockGuard {
+private:
+    SemaphoreHandle_t& mutex;
+    bool locked;
+
+public:
+    explicit SemaphoreLockGuard(SemaphoreHandle_t& m) : mutex(m), locked(false) {
+        if (mutex != NULL) {
+            xSemaphoreTake(mutex, portMAX_DELAY);
+            locked = true;
+        }
+    }
+
+    ~SemaphoreLockGuard() {
+        if (locked && mutex != NULL) {
+            xSemaphoreGive(mutex);
+        }
+    }
+
+    // Prevent copying
+    SemaphoreLockGuard(const SemaphoreLockGuard&) = delete;
+    SemaphoreLockGuard& operator=(const SemaphoreLockGuard&) = delete;
+};
+
+/**
  * TCA9535 I/O Expander GPIO Wrapper for MeshCore
  *
  * Provides Arduino-style GPIO interface for TCA9535 I/O expander
@@ -48,6 +78,7 @@ private:
     uint8_t i2cAddress;      // I2C address of TCA9535
     bool initialized;        // Initialization state
     SemaphoreHandle_t _mutex; // Mutex for thread-safe cache operations
+    bool mutexCreated;       // Tracks if mutex was successfully created
 
     // Pin state cache to minimize I2C transactions
     // digitalWrite checks cache and skips I2C write if state unchanged
@@ -85,14 +116,18 @@ public:
      * @param addr I2C address of TCA9535 (default 0x20 for SenseCAP Indicator)
      */
     TCA9535_GPIO(uint8_t addr = 0x20)
-        : i2cAddress(addr), initialized(false) {
+        : i2cAddress(addr), initialized(false), mutexCreated(false) {
         outputCache = 0xFFFF;    // All high by default
         directionCache = 0xFFFF; // All inputs by default
 
         // Create mutex for thread-safe cache operations
         _mutex = xSemaphoreCreateMutex();
         if (_mutex == NULL) {
-            Serial.println("[TCA9535] WARNING: Failed to create mutex");
+            Serial.println("[TCA9535] ERROR: Failed to create mutex");
+            Serial.println("[TCA9535] Thread-safety cannot be guaranteed!");
+            mutexCreated = false;
+        } else {
+            mutexCreated = true;
         }
     }
 
@@ -123,6 +158,13 @@ public:
      */
     bool begin(TwoWire* wire = &Wire) {
         Serial.printf("[TCA9535] Initializing at I2C address 0x%02X\n", i2cAddress);
+
+        // Check if mutex was successfully created
+        if (!mutexCreated) {
+            Serial.println("[TCA9535] FATAL: Mutex creation failed during construction");
+            Serial.println("[TCA9535] Cannot initialize - thread-safety required");
+            return false;
+        }
 
         if (!ioExpander.begin(i2cAddress, wire)) {
             Serial.printf("[TCA9535] ERROR: Device not found at address 0x%02X\n", i2cAddress);
@@ -194,7 +236,7 @@ public:
      *
      * Pin must be configured as OUTPUT first using pinMode().
      * Uses cache to skip I2C write if pin state hasn't changed.
-     * Thread-safe via mutex protection.
+     * Thread-safe via RAII mutex guard.
      *
      * @param pin Virtual pin number (100-115)
      * @param value HIGH (1) or LOW (0)
@@ -208,10 +250,8 @@ public:
         uint8_t physPin = virtualToPhysical(pin);
         if (physPin == 0xFF) return;
 
-        // Acquire mutex for thread-safe cache access
-        if (_mutex != NULL) {
-            xSemaphoreTake(_mutex, portMAX_DELAY);
-        }
+        // RAII lock guard - automatically releases mutex on all exit paths
+        SemaphoreLockGuard lock(_mutex);
 
         // Check cache - skip I2C write if state unchanged
         uint16_t pinMask = (1 << physPin);
@@ -220,10 +260,7 @@ public:
 
         if (currentState == newState) {
             // Pin already in requested state, skip I2C transaction
-            if (_mutex != NULL) {
-                xSemaphoreGive(_mutex);
-            }
-            return;
+            return;  // Lock guard automatically releases mutex
         }
 
         // Write to TCA9535
@@ -236,14 +273,11 @@ public:
             outputCache &= ~pinMask;
         }
 
-        // Release mutex
-        if (_mutex != NULL) {
-            xSemaphoreGive(_mutex);
-        }
-
         // Verbose logging only for debugging - comment out in production
         // Serial.printf("[TCA9535] Pin %d (phys %d) = %s\n",
         //              pin, physPin, value == HIGH ? "HIGH" : "LOW");
+
+        // Lock guard automatically releases mutex when function exits
     }
 
     /**
