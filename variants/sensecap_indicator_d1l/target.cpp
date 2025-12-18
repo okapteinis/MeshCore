@@ -96,10 +96,9 @@ public:
 void cleanup_all_resources(const char* reason) {
   log_e("Cleaning up resources: %s", reason);
 
-  if (SPIFFS) {
-    SPIFFS.end();
-    log_i("SPIFFS unmounted");
-  }
+  // SPIFFS.end() returns void, so just call it
+  SPIFFS.end();
+  log_i("SPIFFS unmounted");
 
   spi.end();
   Wire.end();
@@ -326,19 +325,16 @@ bool radio_init() {
   Serial.printf("I2C: SDA=%d, SCL=%d, Freq=%u Hz\n",
                 PIN_BOARD_SDA, PIN_BOARD_SCL, TCA9535_I2C_FREQ);
 
-  gpio_expander = new TCA9535_GPIO(TCA9535_I2C_ADDR, Wire);
+  gpio_expander = new TCA9535_GPIO(TCA9535_I2C_ADDR);
   {
     I2C_Lock lock;
-    if (!lock.isLocked() || !gpio_expander->begin()) {
+    if (!lock.isLocked() || !gpio_expander->begin(&Wire)) {
       delete gpio_expander;
       gpio_expander = nullptr;
       return fail_and_cleanup("TCA9535 init failed");
     }
   }
   Serial.printf("TCA9535 at I2C 0x%02X\n", TCA9535_I2C_ADDR);
-
-  custom_hal = new CustomRadioLibHal(gpio_expander);
-  Serial.println("Custom RadioLib HAL created");
   Serial.println();
 #else
   Serial.println("WARNING: USE_CUSTOM_RADIOLIB_HAL not defined!");
@@ -363,18 +359,31 @@ bool radio_init() {
   Serial.printf("  SPI pins (direct): SCK=%d, MISO=%d, MOSI=%d\n",
                 LORA_SCK, LORA_MISO, LORA_MOSI);
   Serial.printf("  Control pins (virtual): CS=%d, DIO1=%d, RST=%d, BUSY=%d\n",
-                LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY);
+                TCA9535_GPIO::LORA_NSS, TCA9535_GPIO::LORA_DIO1,
+                TCA9535_GPIO::LORA_RESET, TCA9535_GPIO::LORA_DIO0);
 #ifdef USE_CUSTOM_RADIOLIB_HAL
   Serial.printf("  TCA9535 I2C: 0x%02X\n", TCA9535_I2C_ADDR);
 #endif
 
   if (radio == nullptr) {
 #ifdef USE_CUSTOM_RADIOLIB_HAL
-    // Create module with custom HAL
-    radio_module = new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY, *custom_hal);
+    // Create module with custom HAL (HAL pointer is first argument!)
+    radio_module = new Module(
+      custom_hal,
+      TCA9535_GPIO::LORA_NSS,
+      TCA9535_GPIO::LORA_DIO1,
+      TCA9535_GPIO::LORA_RESET,
+      TCA9535_GPIO::LORA_DIO0
+    );
 #else
     // Create module with standard HAL
-    radio_module = new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY, spi);
+    radio_module = new Module(
+      TCA9535_GPIO::LORA_NSS,
+      TCA9535_GPIO::LORA_DIO1,
+      TCA9535_GPIO::LORA_RESET,
+      TCA9535_GPIO::LORA_DIO0,
+      spi
+    );
 #endif
     radio = new CustomSX1262(radio_module);
     Serial.println("Radio module created");
