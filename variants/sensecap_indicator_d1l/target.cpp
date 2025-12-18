@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "target.h"
+#include <SPIFFS.h>
 
 // SenseCAP Indicator D1L Implementation
 // Author: MeshCore Community / Latvian community at apraide.lv
@@ -53,7 +54,106 @@ MomentaryButton user_btn(PIN_USER_BTN, INPUT_PULLUP, true);
 #define LORA_CR 5
 #endif
 
+// ============================================================================
+// SPIFFS Storage Functions (Phase 0A - Storage Infrastructure)
+// ============================================================================
+
+/**
+ * Initialize SPIFFS filesystem
+ *
+ * @return true if SPIFFS mounted successfully, false otherwise
+ */
+bool initStorage() {
+  Serial.println("\n===== SPIFFS Initialization =====");
+
+  if (!SPIFFS.begin(true)) {  // true = format if mount fails
+    Serial.println("❌ SPIFFS mount failed!");
+    return false;
+  }
+
+  Serial.println("✅ SPIFFS mounted successfully");
+
+  // Get filesystem info
+  size_t totalBytes = SPIFFS.totalBytes();
+  size_t usedBytes = SPIFFS.usedBytes();
+  size_t freeBytes = totalBytes - usedBytes;
+
+  Serial.printf("Total space: %u bytes (%.2f MB)\n", totalBytes, totalBytes / 1024.0 / 1024.0);
+  Serial.printf("Used space:  %u bytes (%.2f MB)\n", usedBytes, usedBytes / 1024.0 / 1024.0);
+  Serial.printf("Free space:  %u bytes (%.2f MB)\n", freeBytes, freeBytes / 1024.0 / 1024.0);
+  Serial.println("=================================\n");
+
+  return true;
+}
+
+/**
+ * Test map file access from SPIFFS
+ *
+ * Tests if we can open and read the Baltic region map file.
+ * Map should be at /maps/baltic_region.jpg (~500KB)
+ *
+ * @return true if map file exists and can be read, false otherwise
+ */
+bool testMapAccess() {
+  Serial.println("\n===== Map File Access Test =====");
+
+  const char* mapPath = "/maps/baltic_region.jpg";
+
+  if (!SPIFFS.exists(mapPath)) {
+    Serial.printf("⚠️  Map file not found: %s\n", mapPath);
+    Serial.println("This is expected if you haven't uploaded filesystem yet.");
+    Serial.println("Run: pio run -t uploadfs");
+    Serial.println("================================\n");
+    return false;
+  }
+
+  File mapFile = SPIFFS.open(mapPath, "r");
+  if (!mapFile) {
+    Serial.printf("❌ Failed to open map file: %s\n", mapPath);
+    Serial.println("================================\n");
+    return false;
+  }
+
+  size_t fileSize = mapFile.size();
+  Serial.printf("✅ Map file found: %s\n", mapPath);
+  Serial.printf("File size: %u bytes (%.2f KB)\n", fileSize, fileSize / 1024.0);
+
+  // Read first few bytes to verify it's a JPEG
+  uint8_t header[3];
+  mapFile.read(header, 3);
+  mapFile.close();
+
+  if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
+    Serial.println("✅ Valid JPEG header detected");
+    Serial.println("================================\n");
+    return true;
+  } else {
+    Serial.printf("⚠️  Invalid JPEG header: %02X %02X %02X\n", header[0], header[1], header[2]);
+    Serial.println("Expected: FF D8 FF");
+    Serial.println("================================\n");
+    return false;
+  }
+}
+
+// ============================================================================
+// Radio Functions
+// ============================================================================
+
 bool radio_init() {
+  // ===== Phase 0A: Storage Infrastructure Test =====
+  Serial.println("\n========================================");
+  Serial.println("Phase 0A: SPIFFS Storage Test");
+  Serial.println("========================================");
+
+  if (!initStorage()) {
+    Serial.println("⚠️  SPIFFS initialization failed - continuing anyway");
+  } else {
+    testMapAccess();  // Test map file (expected to fail until filesystem is uploaded)
+  }
+
+  Serial.println("========================================\n");
+  // ==================================================
+
   // Initialize clocks
   fallback_clock.begin();
   rtc_clock.begin(Wire);
