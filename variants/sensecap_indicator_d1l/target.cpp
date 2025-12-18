@@ -10,6 +10,10 @@
 #include "hal/freertos_util.h"
 #endif
 
+// RNG includes
+#include <helpers/StdRNG.h>
+#include <helpers/RadioNoiseListener.h>
+
 // Configuration Constants (Replace Magic Numbers)
 namespace Config {
   // Serial
@@ -55,7 +59,12 @@ static CustomRadioLibHal* custom_hal = nullptr;
 
 // Radio Objects (initialized in radio_init)
 static CustomSX1262* radio = nullptr;
-static CustomSX1262Wrapper* radio_driver = nullptr;
+static Module* radio_module = nullptr;
+
+// Create a dummy radio wrapper that will be properly initialized in radio_init
+// This is needed because radio_driver is declared as extern in target.h (not a pointer)
+static CustomSX1262 dummy_radio(new Module(0, 0, 0, 0, spi));
+CustomSX1262Wrapper radio_driver(dummy_radio, board);
 
 // I2C Bus Mutex
 static SemaphoreHandle_t i2c_bus_mutex = nullptr;
@@ -106,13 +115,13 @@ void cleanup_all_resources(const char* reason) {
   }
 #endif
 
-  if (radio_driver != nullptr) {
-    delete radio_driver;
-    radio_driver = nullptr;
-  }
   if (radio != nullptr) {
     delete radio;
     radio = nullptr;
+  }
+  if (radio_module != nullptr) {
+    delete radio_module;
+    radio_module = nullptr;
   }
 
   if (i2c_bus_mutex != nullptr) {
@@ -341,6 +350,14 @@ bool radio_init() {
   spi.begin(LORA_SCK, LORA_MISO, LORA_MOSI);
   Serial.printf("SPI: SCK=%d, MISO=%d, MOSI=%d\n", LORA_SCK, LORA_MISO, LORA_MOSI);
 
+#ifdef USE_CUSTOM_RADIOLIB_HAL
+  // Create HAL with SPI settings
+  SPISettings spiSettings(2000000, MSBFIRST, SPI_MODE0);
+  custom_hal = new CustomRadioLibHal(gpio_expander, spi, spiSettings);
+  custom_hal->init();
+  Serial.println("HAL initialized with SPI settings");
+#endif
+
   // Initialize Radio
   Serial.println("\nInitializing SX1262 Radio");
   Serial.printf("  SPI pins (direct): SCK=%d, MISO=%d, MOSI=%d\n",
@@ -352,21 +369,19 @@ bool radio_init() {
 #endif
 
   if (radio == nullptr) {
-    radio = new CustomSX1262(
-      new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY, spi)
-    );
-
 #ifdef USE_CUSTOM_RADIOLIB_HAL
-    if (custom_hal != nullptr) {
-      radio->getModule()->hal = custom_hal;
-      Serial.println("HAL attached to radio");
-    } else {
-      return fail_and_cleanup("HAL is NULL");
-    }
+    // Create module with custom HAL
+    radio_module = new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY, *custom_hal);
+#else
+    // Create module with standard HAL
+    radio_module = new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY, spi);
 #endif
+    radio = new CustomSX1262(radio_module);
+    Serial.println("Radio module created");
 
-    radio_driver = new CustomSX1262Wrapper(*radio, board);
-    Serial.println("Radio driver created");
+    // Initialize the radio_driver wrapper with the actual radio
+    radio_driver = CustomSX1262Wrapper(*radio, board);
+    Serial.println("Radio driver initialized");
   }
 
   Serial.println("Attempting radio.begin() with timeout...");
