@@ -62,6 +62,8 @@
 class CustomRadioLibHal : public ArduinoHal {
 private:
     TCA9535_GPIO* ioExpander;  // Pointer to TCA9535 GPIO wrapper
+    bool initialized;          // Tracks if HAL is properly initialized
+    SemaphoreHandle_t i2cMutex; // Protects I2C operations for thread safety
 
     /**
      * Determine if pin number is virtual (managed by TCA9535)
@@ -169,11 +171,18 @@ public:
         : ArduinoHal(spi, spiSettings),
           ioExpander(gpio),
           virtualInterruptCount(0),
-          pollTaskHandle(NULL) {
+          pollTaskHandle(NULL),
+          initialized(false) {
 
         // Initialize virtual interrupt array
         for (int i = 0; i < MAX_VIRTUAL_INTERRUPTS; i++) {
             virtualInterrupts[i].enabled = false;
+        }
+
+        // Initialize I2C mutex for thread-safe operations
+        i2cMutex = xSemaphoreCreateMutex();
+        if (i2cMutex == NULL) {
+            Serial.println("[CustomHAL] WARNING: Failed to create I2C mutex");
         }
 
         Serial.println("[CustomHAL] Created");
@@ -182,7 +191,29 @@ public:
     }
 
     /**
-     * Initialize HAL and start interrupt polling task
+     * Destructor
+     *
+     * Automatically cleans up resources when HAL object is destroyed.
+     * Ensures polling task is stopped and mutex is deleted.
+     */
+    ~CustomRadioLibHal() {
+        // Stop polling task if running
+        if (pollTaskHandle != NULL) {
+            vTaskDelete(pollTaskHandle);
+            pollTaskHandle = NULL;
+        }
+
+        // Delete mutex if created
+        if (i2cMutex != NULL) {
+            vSemaphoreDelete(i2cMutex);
+            i2cMutex = NULL;
+        }
+
+        Serial.println("[CustomHAL] Destructor called - resources cleaned up");
+    }
+
+    /**
+     * Initialize HAL and start interrupt polling task (3KB stack)
      *
      * Must be called after constructor and before using radio.
      * Creates a FreeRTOS task for polling virtual interrupts.
@@ -194,17 +225,23 @@ public:
         BaseType_t result = xTaskCreate(
             pollTask,
             "TCA9535Poll",  // Task name
-            2048,           // Stack size (bytes)
+            3072,           // Stack size (bytes) - recommended minimum for I2C operations
             this,           // Task parameter (this HAL instance)
             2,              // Priority (higher than normal tasks)
             &pollTaskHandle
         );
 
         if (result == pdPASS) {
-            Serial.println("[CustomHAL] Initialized");
+            initialized = true;
+            Serial.println("[CustomHAL] Initialized successfully");
             Serial.println("[CustomHAL] Polling task started (priority 2, 1ms interval)");
         } else {
-            Serial.println("[CustomHAL] ERROR: Failed to create polling task!");
+            initialized = false;
+            Serial.println("[CustomHAL] FATAL ERROR: Failed to create polling task!");
+            Serial.println("[CustomHAL] Possible causes:");
+            Serial.println("[CustomHAL]   - Out of memory");
+            Serial.println("[CustomHAL]   - Too many FreeRTOS tasks");
+            Serial.println("[CustomHAL] Radio interrupts will NOT work!");
         }
     }
 
@@ -220,6 +257,13 @@ public:
             Serial.println("[CustomHAL] Polling task stopped");
         }
 
+        if (i2cMutex != NULL) {
+            vSemaphoreDelete(i2cMutex);
+            i2cMutex = NULL;
+            Serial.println("[CustomHAL] I2C mutex deleted");
+        }
+
+        initialized = false;
         ArduinoHal::term();
         Serial.println("[CustomHAL] Terminated");
     }
@@ -238,7 +282,13 @@ public:
             // Verbose logging disabled for performance - uncomment for debugging:
             // Serial.printf("[CustomHAL] pinMode virtual pin %d mode %s\n",
             //              pin, mode == OUTPUT ? "OUTPUT" : "INPUT");
+            if (i2cMutex != NULL) {
+                xSemaphoreTake(i2cMutex, portMAX_DELAY);
+            }
             ioExpander->pinMode(pin, mode);
+            if (i2cMutex != NULL) {
+                xSemaphoreGive(i2cMutex);
+            }
         } else {
             ArduinoHal::pinMode(pin, mode);
         }
@@ -255,7 +305,13 @@ public:
             // Verbose logging disabled for performance - uncomment for debugging:
             // Serial.printf("[CustomHAL] digitalWrite virtual pin %d = %s\n",
             //              pin, value ? "HIGH" : "LOW");
+            if (i2cMutex != NULL) {
+                xSemaphoreTake(i2cMutex, portMAX_DELAY);
+            }
             ioExpander->digitalWrite(pin, value);
+            if (i2cMutex != NULL) {
+                xSemaphoreGive(i2cMutex);
+            }
         } else {
             ArduinoHal::digitalWrite(pin, value);
         }
@@ -269,7 +325,14 @@ public:
      */
     uint32_t digitalRead(uint32_t pin) override {
         if (isVirtualPin(pin)) {
-            uint32_t value = ioExpander->digitalRead(pin);
+            uint32_t value;
+            if (i2cMutex != NULL) {
+                xSemaphoreTake(i2cMutex, portMAX_DELAY);
+            }
+            value = ioExpander->digitalRead(pin);
+            if (i2cMutex != NULL) {
+                xSemaphoreGive(i2cMutex);
+            }
             // Verbose logging disabled for performance - uncomment for debugging:
             // Serial.printf("[CustomHAL] digitalRead virtual pin %d = %s\n",
             //              pin, value ? "HIGH" : "LOW");
@@ -381,6 +444,15 @@ public:
 
         Serial.printf("Polling Task: %s\n", pollTaskHandle != NULL ? "Running" : "Stopped");
         Serial.println("====================================");
+    }
+
+    /**
+     * Check if HAL is properly initialized
+     *
+     * @return true if polling task is running, false otherwise
+     */
+    bool isInitialized() const {
+        return initialized;
     }
 
     // All other HAL methods pass through to ArduinoHal base class:
