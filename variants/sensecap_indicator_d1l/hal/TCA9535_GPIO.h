@@ -44,7 +44,7 @@
  */
 class TCA9535_GPIO {
 private:
-    TCA9555 ioExpander;      // Underlying driver (TCA9555 is compatible with TCA9535)
+    TCA9555* ioExpander;     // Underlying driver (TCA9555 is compatible with TCA9535)
     uint8_t i2cAddress;      // I2C address of TCA9535
     bool initialized;        // Initialization state
     SemaphoreHandle_t _mutex; // Mutex for thread-safe cache operations
@@ -86,7 +86,7 @@ public:
      * @param addr I2C address of TCA9535 (default 0x20 for SenseCAP Indicator)
      */
     TCA9535_GPIO(uint8_t addr = 0x20)
-        : i2cAddress(addr), initialized(false), mutexCreated(false) {
+        : ioExpander(nullptr), i2cAddress(addr), initialized(false), mutexCreated(false) {
         outputCache = 0xFFFF;    // All high by default
         directionCache = 0xFFFF; // All inputs by default
 
@@ -104,9 +104,13 @@ public:
     /**
      * Destructor
      *
-     * Cleans up mutex resource when object is destroyed.
+     * Cleans up resources when object is destroyed.
      */
     ~TCA9535_GPIO() {
+        if (ioExpander != nullptr) {
+            delete ioExpander;
+            ioExpander = nullptr;
+        }
         if (_mutex != NULL) {
             vSemaphoreDelete(_mutex);
             _mutex = NULL;
@@ -136,10 +140,20 @@ public:
             return false;
         }
 
-        if (!ioExpander.begin(i2cAddress, wire)) {
+        // Create TCA9555 driver instance with address and Wire
+        ioExpander = new TCA9555(i2cAddress, wire);
+        if (ioExpander == nullptr) {
+            Serial.println("[TCA9535] ERROR: Failed to allocate TCA9555 driver");
+            return false;
+        }
+
+        // Initialize the driver (sets pin modes)
+        if (!ioExpander->begin(INPUT)) {
             Serial.printf("[TCA9535] ERROR: Device not found at address 0x%02X\n", i2cAddress);
-            Serial.println("[TCA9535] Check I2C wiring: SDA=GPIO6, SCL=GPIO7");
+            Serial.println("[TCA9535] Check I2C wiring: SDA=GPIO39, SCL=GPIO40");
             Serial.println("[TCA9535] Run I2C scanner to verify address");
+            delete ioExpander;
+            ioExpander = nullptr;
             return false;
         }
 
@@ -188,7 +202,7 @@ public:
         if (physPin == 0xFF) return;
 
         // Set pin mode on TCA9535
-        ioExpander.pinMode1(physPin, mode);
+        ioExpander->pinMode1(physPin, mode);
 
         // Update direction cache
         if (mode == OUTPUT) {
@@ -234,7 +248,7 @@ public:
         }
 
         // Write to TCA9535 and verify success
-        if (!ioExpander.write1(physPin, value)) {
+        if (!ioExpander->write1(physPin, value)) {
             Serial.printf("[TCA9535] ERROR: I2C write failed on pin %u\n", pin);
             // Lock guard automatically releases mutex when function exits
             return;  // Don't update cache if hardware write failed
@@ -273,7 +287,7 @@ public:
         if (physPin == 0xFF) return LOW;
 
         // Read from TCA9535
-        uint8_t value = ioExpander.read1(physPin);
+        uint8_t value = ioExpander->read1(physPin);
 
         // Verbose logging only for debugging - uncomment if needed
         // Serial.printf("[TCA9535] Pin %d (phys %d) read = %s\n",
