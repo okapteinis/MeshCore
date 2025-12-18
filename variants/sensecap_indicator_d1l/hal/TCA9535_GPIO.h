@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <TCA9555.h>
+#include <freertos/semphr.h>
 
 /**
  * TCA9535 I/O Expander GPIO Wrapper for MeshCore
@@ -46,6 +47,7 @@ private:
     TCA9555 ioExpander;      // Underlying driver (TCA9555 is compatible with TCA9535)
     uint8_t i2cAddress;      // I2C address of TCA9535
     bool initialized;        // Initialization state
+    SemaphoreHandle_t _mutex; // Mutex for thread-safe cache operations
 
     // Pin state cache to minimize I2C transactions
     // digitalWrite checks cache and skips I2C write if state unchanged
@@ -86,6 +88,24 @@ public:
         : i2cAddress(addr), initialized(false) {
         outputCache = 0xFFFF;    // All high by default
         directionCache = 0xFFFF; // All inputs by default
+
+        // Create mutex for thread-safe cache operations
+        _mutex = xSemaphoreCreateMutex();
+        if (_mutex == NULL) {
+            Serial.println("[TCA9535] WARNING: Failed to create mutex");
+        }
+    }
+
+    /**
+     * Destructor
+     *
+     * Cleans up mutex resource when object is destroyed.
+     */
+    ~TCA9535_GPIO() {
+        if (_mutex != NULL) {
+            vSemaphoreDelete(_mutex);
+            _mutex = NULL;
+        }
     }
 
     /**
@@ -174,6 +194,7 @@ public:
      *
      * Pin must be configured as OUTPUT first using pinMode().
      * Uses cache to skip I2C write if pin state hasn't changed.
+     * Thread-safe via mutex protection.
      *
      * @param pin Virtual pin number (100-115)
      * @param value HIGH (1) or LOW (0)
@@ -187,6 +208,11 @@ public:
         uint8_t physPin = virtualToPhysical(pin);
         if (physPin == 0xFF) return;
 
+        // Acquire mutex for thread-safe cache access
+        if (_mutex != NULL) {
+            xSemaphoreTake(_mutex, portMAX_DELAY);
+        }
+
         // Check cache - skip I2C write if state unchanged
         uint16_t pinMask = (1 << physPin);
         bool currentState = (outputCache & pinMask) != 0;
@@ -194,6 +220,9 @@ public:
 
         if (currentState == newState) {
             // Pin already in requested state, skip I2C transaction
+            if (_mutex != NULL) {
+                xSemaphoreGive(_mutex);
+            }
             return;
         }
 
@@ -205,6 +234,11 @@ public:
             outputCache |= pinMask;
         } else {
             outputCache &= ~pinMask;
+        }
+
+        // Release mutex
+        if (_mutex != NULL) {
+            xSemaphoreGive(_mutex);
         }
 
         // Verbose logging only for debugging - comment out in production
