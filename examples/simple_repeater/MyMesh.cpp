@@ -1,6 +1,6 @@
 #include "MyMesh.h"
 #include <algorithm>
-#include <helpers/ProtocolCodes.h>
+#include "ProtocolCodes.h"
 
 /* ------------------------------ Config -------------------------------- */
 
@@ -19,9 +19,6 @@
 #ifndef LORA_TX_POWER
   #define LORA_TX_POWER 20
 #endif
-
-#define MAX_LORA_TX_POWER  22  // Maximum TX power for SX1262 (dBm)
-#define REPLY_BUFFER_SIZE  160 // Size of reply buffer for CLI commands
 
 #ifndef ADVERT_NAME
   #define ADVERT_NAME "repeater"
@@ -852,15 +849,18 @@ void MyMesh::formatNeighborsReply(char *reply) {
 
     // add next neighbour
     uint32_t secs_ago = getRTCClock()->getCurrentTime() - neighbour->heard_timestamp;
-    size_t remaining = 160 - (dp - reply);  // reply buffer is 160 bytes
+    size_t remaining = REPLY_BUFFER_SIZE - (dp - reply);
     int written = snprintf(dp, remaining, "%s:%d:%d", hex, secs_ago, neighbour->snr);
     if (written > 0 && (size_t)written < remaining) {
       dp += written;
+    } else {
+      // Buffer is full or snprintf truncated, stop adding neighbors
+      break;
     }
   }
 #endif
   if (dp == reply) { // no neighbours, need empty response
-    size_t remaining = 160 - (dp - reply);
+    size_t remaining = REPLY_BUFFER_SIZE - (dp - reply);
     strncpy(dp, "-none-", remaining);
     dp[std::min((size_t)6, remaining - 1)] = '\0';  // Ensure null termination
     dp += 6;
@@ -1182,9 +1182,9 @@ void MyMesh::checkSerialInterface() {
 void MyMesh::handleCmdFrame(size_t len) {
   MESH_DEBUG_PRINTLN("handleCmdFrame: cmd=%d, len=%d", cmd_frame[0], len);
 
-  if (cmd_frame[0] == CMD_DEVICE_QEURY && len >= 2) {
+  if (cmd_frame[0] == CMD_DEVICE_QUERY && len >= 2) {
     // App sent device query - respond with device info
-    MESH_DEBUG_PRINTLN("CMD_DEVICE_QEURY: app_ver=%d", cmd_frame[1]);
+    MESH_DEBUG_PRINTLN("CMD_DEVICE_QUERY: app_ver=%d", cmd_frame[1]);
     app_target_ver = cmd_frame[1];  // Protocol version the app understands
 
     int i = 0;
@@ -1221,15 +1221,18 @@ void MyMesh::handleCmdFrame(size_t len) {
       return;
     }
 
-    char *app_name = (char *)&cmd_frame[8];
-    cmd_frame[len] = 0;  // null terminate app name
-    MESH_DEBUG_PRINTLN("App '%s' connected via BLE", app_name);
+    // Use precision specifier for safe string printing without buffer modification
+    if (len > 8) {
+      MESH_DEBUG_PRINTLN("App '%.*s' connected via BLE", (int)(len - 8), (char *)&cmd_frame[8]);
+    } else {
+      MESH_DEBUG_PRINTLN("App connected via BLE");
+    }
 
     int i = 0;
     out_frame[i++] = RESP_CODE_SELF_INFO;
     out_frame[i++] = ADV_TYPE_REPEATER;  // Node type: repeater
     out_frame[i++] = _prefs.tx_power_dbm;
-    out_frame[i++] = MAX_LORA_TX_POWER;
+    out_frame[i++] = MAX_LORA_TX_POWER_SX1262;
     memcpy(&out_frame[i], self_id.pub_key, PUB_KEY_SIZE);
     i += PUB_KEY_SIZE;
 
@@ -1258,8 +1261,8 @@ void MyMesh::handleCmdFrame(size_t len) {
 
     // Node name (variable length, null terminated in source)
     int tlen = strlen(_prefs.node_name);
-    memcpy(&out_frame[i], _prefs.node_name, tlen);
-    i += tlen;
+    memcpy(&out_frame[i], _prefs.node_name, tlen + 1);  // Include null terminator
+    i += tlen + 1;
 
     _serial->writeFrame(out_frame, i);
 
@@ -1304,7 +1307,6 @@ void MyMesh::handleCmdFrame(size_t len) {
 
     MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_NAME: Saving '%s'", _prefs.node_name);
     savePrefs();
-    // TODO: Check filesystem status if savePrefs fails
     writeOKFrame();
 
     MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_NAME: Saved successfully");
@@ -1341,7 +1343,10 @@ void MyMesh::handleCmdFrame(size_t len) {
     uint8_t cr = cmd_frame[i++];
 
     // Validate parameters
-    if (freq >= 300000 && freq <= 2500000 && sf >= 5 && sf <= 12 && cr >= 5 && cr <= 8 && bw >= 7000 && bw <= 500000) {
+    if (freq >= MIN_FREQ_HZ && freq <= MAX_FREQ_HZ &&
+        sf >= MIN_SF && sf <= MAX_SF &&
+        cr >= MIN_CR && cr <= MAX_CR &&
+        bw >= MIN_BW_HZ && bw <= MAX_BW_HZ) {
       _prefs.sf = sf;
       _prefs.cr = cr;
       _prefs.freq = (float)freq / 1000.0;
@@ -1349,8 +1354,6 @@ void MyMesh::handleCmdFrame(size_t len) {
 
       MESH_DEBUG_PRINTLN("CMD_SET_RADIO_PARAMS: Saving f=%.3f, bw=%.1f, sf=%d, cr=%d", _prefs.freq, _prefs.bw, sf, cr);
       savePrefs();
-      // TODO: Check filesystem status if savePrefs fails
-
       radio_set_params(_prefs.freq, _prefs.bw, _prefs.sf, _prefs.cr);
       writeOKFrame();
 
@@ -1362,7 +1365,7 @@ void MyMesh::handleCmdFrame(size_t len) {
 
   } else if (cmd_frame[0] == CMD_SET_RADIO_TX_POWER && len >= 2) {
     // App wants to change TX power
-    if (cmd_frame[1] > MAX_LORA_TX_POWER) {
+    if (cmd_frame[1] > MAX_LORA_TX_POWER_SX1262) {
       writeErrFrame(ERR_CODE_ILLEGAL_ARG);
       MESH_DEBUG_PRINTLN("CMD_SET_RADIO_TX_POWER: Invalid power %d", cmd_frame[1]);
     } else {
@@ -1370,8 +1373,6 @@ void MyMesh::handleCmdFrame(size_t len) {
 
       MESH_DEBUG_PRINTLN("CMD_SET_RADIO_TX_POWER: Saving %d dBm", _prefs.tx_power_dbm);
       savePrefs();
-      // TODO: Check filesystem status if savePrefs fails
-
       radio_set_tx_power(_prefs.tx_power_dbm);
       writeOKFrame();
 
@@ -1393,7 +1394,8 @@ void MyMesh::handleCmdFrame(size_t len) {
     memcpy(&lon, &cmd_frame[5], 4);
 
     // Validate coordinates are reasonable
-    if (lat <= 90 * 1000000 && lat >= -90 * 1000000 && lon <= 180 * 1000000 && lon >= -180 * 1000000) {
+    if (lat <= MAX_LAT * COORDS_MULTIPLIER && lat >= MIN_LAT * COORDS_MULTIPLIER &&
+        lon <= MAX_LON * COORDS_MULTIPLIER && lon >= MIN_LON * COORDS_MULTIPLIER) {
       // Accept but don't save - repeater has no GPS functionality
       writeOKFrame();
       MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_LATLON: lat=%.6f, lon=%.6f (accepted but not saved)",
