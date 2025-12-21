@@ -852,15 +852,18 @@ void MyMesh::formatNeighborsReply(char *reply) {
 
     // add next neighbour
     uint32_t secs_ago = getRTCClock()->getCurrentTime() - neighbour->heard_timestamp;
-    size_t remaining = 160 - (dp - reply);  // reply buffer is 160 bytes
+    size_t remaining = REPLY_BUFFER_SIZE - (dp - reply);
     int written = snprintf(dp, remaining, "%s:%d:%d", hex, secs_ago, neighbour->snr);
     if (written > 0 && (size_t)written < remaining) {
       dp += written;
+    } else {
+      // Buffer is full or snprintf truncated, stop adding neighbors
+      break;
     }
   }
 #endif
   if (dp == reply) { // no neighbours, need empty response
-    size_t remaining = 160 - (dp - reply);
+    size_t remaining = REPLY_BUFFER_SIZE - (dp - reply);
     strncpy(dp, "-none-", remaining);
     dp[std::min((size_t)6, remaining - 1)] = '\0';  // Ensure null termination
     dp += 6;
@@ -1221,9 +1224,12 @@ void MyMesh::handleCmdFrame(size_t len) {
       return;
     }
 
-    char *app_name = (char *)&cmd_frame[8];
-    cmd_frame[len] = 0;  // null terminate app name
-    MESH_DEBUG_PRINTLN("App '%s' connected via BLE", app_name);
+    // Use precision specifier for safe string printing without buffer modification
+    if (len > 8) {
+      MESH_DEBUG_PRINTLN("App '%.*s' connected via BLE", (int)(len - 8), (char *)&cmd_frame[8]);
+    } else {
+      MESH_DEBUG_PRINTLN("App connected via BLE");
+    }
 
     int i = 0;
     out_frame[i++] = RESP_CODE_SELF_INFO;
@@ -1258,8 +1264,8 @@ void MyMesh::handleCmdFrame(size_t len) {
 
     // Node name (variable length, null terminated in source)
     int tlen = strlen(_prefs.node_name);
-    memcpy(&out_frame[i], _prefs.node_name, tlen);
-    i += tlen;
+    memcpy(&out_frame[i], _prefs.node_name, tlen + 1);  // Include null terminator
+    i += tlen + 1;
 
     _serial->writeFrame(out_frame, i);
 
@@ -1304,7 +1310,6 @@ void MyMesh::handleCmdFrame(size_t len) {
 
     MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_NAME: Saving '%s'", _prefs.node_name);
     savePrefs();
-    // TODO: Check filesystem status if savePrefs fails
     writeOKFrame();
 
     MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_NAME: Saved successfully");
@@ -1349,8 +1354,6 @@ void MyMesh::handleCmdFrame(size_t len) {
 
       MESH_DEBUG_PRINTLN("CMD_SET_RADIO_PARAMS: Saving f=%.3f, bw=%.1f, sf=%d, cr=%d", _prefs.freq, _prefs.bw, sf, cr);
       savePrefs();
-      // TODO: Check filesystem status if savePrefs fails
-
       radio_set_params(_prefs.freq, _prefs.bw, _prefs.sf, _prefs.cr);
       writeOKFrame();
 
@@ -1370,8 +1373,6 @@ void MyMesh::handleCmdFrame(size_t len) {
 
       MESH_DEBUG_PRINTLN("CMD_SET_RADIO_TX_POWER: Saving %d dBm", _prefs.tx_power_dbm);
       savePrefs();
-      // TODO: Check filesystem status if savePrefs fails
-
       radio_set_tx_power(_prefs.tx_power_dbm);
       writeOKFrame();
 
