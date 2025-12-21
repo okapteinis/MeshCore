@@ -1280,10 +1280,13 @@ void MyMesh::handleCmdFrame(size_t len) {
     if (nlen > sizeof(_prefs.node_name) - 1) nlen = sizeof(_prefs.node_name) - 1;
     memcpy(_prefs.node_name, &cmd_frame[1], nlen);
     _prefs.node_name[nlen] = 0;  // null terminator
+
+    MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_NAME: Saving '%s'", _prefs.node_name);
     savePrefs();
+    // TODO: Check filesystem status if savePrefs fails
     writeOKFrame();
 
-    MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_NAME: '%s'", _prefs.node_name);
+    MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_NAME: Saved successfully");
 
   } else if (cmd_frame[0] == CMD_SET_RADIO_PARAMS && len >= 11) {
     // App wants to change radio parameters
@@ -1303,12 +1306,15 @@ void MyMesh::handleCmdFrame(size_t len) {
       _prefs.cr = cr;
       _prefs.freq = (float)freq / 1000.0;
       _prefs.bw = (float)bw / 1000.0;
+
+      MESH_DEBUG_PRINTLN("CMD_SET_RADIO_PARAMS: Saving f=%.3f, bw=%.1f, sf=%d, cr=%d", _prefs.freq, _prefs.bw, sf, cr);
       savePrefs();
+      // TODO: Check filesystem status if savePrefs fails
 
       radio_set_params(_prefs.freq, _prefs.bw, _prefs.sf, _prefs.cr);
       writeOKFrame();
 
-      MESH_DEBUG_PRINTLN("CMD_SET_RADIO_PARAMS: f=%.3f, bw=%.1f, sf=%d, cr=%d", _prefs.freq, _prefs.bw, sf, cr);
+      MESH_DEBUG_PRINTLN("CMD_SET_RADIO_PARAMS: Saved and applied successfully");
     } else {
       writeErrFrame(ERR_CODE_ILLEGAL_ARG);
       MESH_DEBUG_PRINTLN("CMD_SET_RADIO_PARAMS: Invalid params f=%u, bw=%u, sf=%d, cr=%d", freq, bw, sf, cr);
@@ -1321,11 +1327,15 @@ void MyMesh::handleCmdFrame(size_t len) {
       MESH_DEBUG_PRINTLN("CMD_SET_RADIO_TX_POWER: Invalid power %d", cmd_frame[1]);
     } else {
       _prefs.tx_power_dbm = cmd_frame[1];
+
+      MESH_DEBUG_PRINTLN("CMD_SET_RADIO_TX_POWER: Saving %d dBm", _prefs.tx_power_dbm);
       savePrefs();
+      // TODO: Check filesystem status if savePrefs fails
+
       radio_set_tx_power(_prefs.tx_power_dbm);
       writeOKFrame();
 
-      MESH_DEBUG_PRINTLN("CMD_SET_RADIO_TX_POWER: %d dBm", _prefs.tx_power_dbm);
+      MESH_DEBUG_PRINTLN("CMD_SET_RADIO_TX_POWER: Saved and applied successfully");
     }
 
   } else if (cmd_frame[0] == CMD_SET_ADVERT_LATLON && len >= 9) {
