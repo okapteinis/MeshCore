@@ -20,6 +20,9 @@
   #define LORA_TX_POWER 20
 #endif
 
+#define MAX_LORA_TX_POWER  22  // Maximum TX power for SX1262 (dBm)
+#define REPLY_BUFFER_SIZE  160 // Size of reply buffer for CLI commands
+
 #ifndef ADVERT_NAME
   #define ADVERT_NAME "repeater"
 #endif
@@ -1143,12 +1146,16 @@ void MyMesh::loop() {
 /* -------------------- Serial Interface Methods (BLE/WiFi) -------------------- */
 
 void MyMesh::writeOKFrame() {
+  if (!_serial) return;  // No serial interface configured
+
   uint8_t buf[1];
   buf[0] = RESP_CODE_OK;
   _serial->writeFrame(buf, 1);
 }
 
 void MyMesh::writeErrFrame(uint8_t err_code) {
+  if (!_serial) return;  // No serial interface configured
+
   uint8_t buf[2];
   buf[0] = RESP_CODE_ERR;
   buf[1] = err_code;
@@ -1162,6 +1169,10 @@ void MyMesh::startInterface(BaseSerialInterface &serial) {
 }
 
 void MyMesh::checkSerialInterface() {
+  if (!_serial) {
+    return;  // No serial interface configured
+  }
+
   size_t len = _serial->checkRecvFrame(cmd_frame);
   if (len > 0) {
     handleCmdFrame(len);
@@ -1169,8 +1180,11 @@ void MyMesh::checkSerialInterface() {
 }
 
 void MyMesh::handleCmdFrame(size_t len) {
+  MESH_DEBUG_PRINTLN("handleCmdFrame: cmd=%d, len=%d", cmd_frame[0], len);
+
   if (cmd_frame[0] == CMD_DEVICE_QEURY && len >= 2) {
     // App sent device query - respond with device info
+    MESH_DEBUG_PRINTLN("CMD_DEVICE_QEURY: app_ver=%d", cmd_frame[1]);
     app_target_ver = cmd_frame[1];  // Protocol version the app understands
 
     int i = 0;
@@ -1215,7 +1229,7 @@ void MyMesh::handleCmdFrame(size_t len) {
     out_frame[i++] = RESP_CODE_SELF_INFO;
     out_frame[i++] = ADV_TYPE_REPEATER;  // Node type: repeater
     out_frame[i++] = _prefs.tx_power_dbm;
-    out_frame[i++] = 22;  // MAX_LORA_TX_POWER for SX1262
+    out_frame[i++] = MAX_LORA_TX_POWER;
     memcpy(&out_frame[i], self_id.pub_key, PUB_KEY_SIZE);
     i += PUB_KEY_SIZE;
 
@@ -1348,7 +1362,7 @@ void MyMesh::handleCmdFrame(size_t len) {
 
   } else if (cmd_frame[0] == CMD_SET_RADIO_TX_POWER && len >= 2) {
     // App wants to change TX power
-    if (cmd_frame[1] > 22) {  // MAX_LORA_TX_POWER for SX1262
+    if (cmd_frame[1] > MAX_LORA_TX_POWER) {
       writeErrFrame(ERR_CODE_ILLEGAL_ARG);
       MESH_DEBUG_PRINTLN("CMD_SET_RADIO_TX_POWER: Invalid power %d", cmd_frame[1]);
     } else {
