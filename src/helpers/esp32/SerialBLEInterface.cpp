@@ -107,13 +107,17 @@ void SerialBLEInterface::onWrite(BLECharacteristic* pCharacteristic, esp_ble_gat
 
   if (len > MAX_FRAME_SIZE) {
     BLE_DEBUG_PRINTLN("ERROR: onWrite(), frame too big, len=%d", len);
-  } else if (recv_queue_len >= FRAME_QUEUE_SIZE) {
-    BLE_DEBUG_PRINTLN("ERROR: onWrite(), recv_queue is full!");
-  } else {
-    recv_queue[recv_queue_len].len = len;
-    memcpy(recv_queue[recv_queue_len].buf, rxValue, len);
-    recv_queue_len++;
+    return;  // CRITICAL: Prevent buffer overflow
   }
+
+  if (recv_queue_len >= FRAME_QUEUE_SIZE) {
+    BLE_DEBUG_PRINTLN("ERROR: onWrite(), recv_queue is full!");
+    return;  // CRITICAL: Prevent queue corruption
+  }
+
+  recv_queue[recv_queue_len].len = len;
+  memcpy(recv_queue[recv_queue_len].buf, rxValue, len);
+  recv_queue_len++;
 }
 
 // ---------- public methods
