@@ -1,6 +1,33 @@
 #include "MyMesh.h"
 #include <algorithm>
 
+/* ------------------------ Serial Protocol Commands -------------------- */
+// Binary protocol commands for app connection (minimal subset for repeater)
+#define CMD_APP_START                 1
+#define CMD_GET_CONTACTS              4
+#define CMD_SET_ADVERT_NAME           8
+#define CMD_SYNC_NEXT_MESSAGE         10
+#define CMD_SET_RADIO_PARAMS          11
+#define CMD_SET_RADIO_TX_POWER        12
+#define CMD_SET_ADVERT_LATLON         14
+#define CMD_DEVICE_QEURY              22
+
+#define RESP_CODE_OK                  0
+#define RESP_CODE_ERR                 1
+#define RESP_CODE_CONTACTS_START      2
+#define RESP_CODE_END_OF_CONTACTS     4
+#define RESP_CODE_SELF_INFO           5
+#define RESP_CODE_NO_MORE_MESSAGES    10
+#define RESP_CODE_DEVICE_INFO         13
+
+// Error codes (1-10)
+#define ERR_CODE_UNSUPPORTED_CMD      1
+#define ERR_CODE_FILE_IO_ERROR        5
+#define ERR_CODE_ILLEGAL_ARG          6
+
+#define FIRMWARE_VER_CODE             8   // Protocol version
+#define ADV_TYPE_REPEATER             6   // Repeater node type
+
 /* ------------------------------ Config -------------------------------- */
 
 #ifndef LORA_FREQ
@@ -676,6 +703,8 @@ MyMesh::MyMesh(mesh::MainBoard &board, mesh::Radio &radio, mesh::MillisecondCloc
   set_radio_at = revert_radio_at = 0;
   _logging = false;
   region_load_active = false;
+  _serial = NULL;
+  app_target_ver = 0;
 
 #if MAX_NEIGHBOURS
   memset(neighbours, 0, sizeof(neighbours));
@@ -1073,6 +1102,11 @@ void MyMesh::loop() {
 
   mesh::Mesh::loop();
 
+  // Handle serial interface (BLE/WiFi) commands if connected
+  if (_serial) {
+    checkSerialInterface();
+  }
+
   if (next_flood_advert && millisHasNowPassed(next_flood_advert)) {
     mesh::Packet *pkt = createSelfAdvert();
     if (pkt) sendFlood(pkt);
@@ -1108,4 +1142,214 @@ void MyMesh::loop() {
   uint32_t now = millis();
   uptime_millis += now - last_millis;
   last_millis = now;
+}
+
+/* -------------------- Serial Interface Methods (BLE/WiFi) -------------------- */
+
+void MyMesh::writeOKFrame() {
+  uint8_t buf[1];
+  buf[0] = RESP_CODE_OK;
+  _serial->writeFrame(buf, 1);
+}
+
+void MyMesh::writeErrFrame(uint8_t err_code) {
+  uint8_t buf[2];
+  buf[0] = RESP_CODE_ERR;
+  buf[1] = err_code;
+  _serial->writeFrame(buf, 2);
+}
+
+void MyMesh::startInterface(BaseSerialInterface &serial) {
+  _serial = &serial;
+  serial.enable();
+  MESH_DEBUG_PRINTLN("Serial interface started");
+}
+
+void MyMesh::checkSerialInterface() {
+  size_t len = _serial->checkRecvFrame(cmd_frame);
+  if (len > 0) {
+    handleCmdFrame(len);
+  }
+}
+
+void MyMesh::handleCmdFrame(size_t len) {
+  if (cmd_frame[0] == CMD_DEVICE_QEURY && len >= 2) {
+    // App sent device query - respond with device info
+    app_target_ver = cmd_frame[1];  // Protocol version the app understands
+
+    int i = 0;
+    out_frame[i++] = RESP_CODE_DEVICE_INFO;
+    out_frame[i++] = FIRMWARE_VER_CODE;
+    out_frame[i++] = 0;  // max_contacts / 2 (repeater has none)
+    out_frame[i++] = 0;  // max_group_channels (repeater has none)
+    uint32_t ble_pin = BLE_PIN_CODE;
+    memcpy(&out_frame[i], &ble_pin, 4);
+    i += 4;
+    memset(&out_frame[i], 0, 12);
+    strncpy((char *)&out_frame[i], FIRMWARE_BUILD_DATE, 12);
+    i += 12;
+    memset(&out_frame[i], 0, 40);
+    strncpy((char *)&out_frame[i], "SenseCAP Indicator D1L", 40);
+    i += 40;
+    memset(&out_frame[i], 0, 20);
+    strncpy((char *)&out_frame[i], FIRMWARE_VERSION, 20);
+    i += 20;
+    _serial->writeFrame(out_frame, i);
+
+    MESH_DEBUG_PRINTLN("Sent DEVICE_INFO");
+
+  } else if (cmd_frame[0] == CMD_APP_START && len >= 8) {
+    // App sent connection start - respond with node self info
+    char *app_name = (char *)&cmd_frame[8];
+    cmd_frame[len] = 0;  // null terminate app name
+    MESH_DEBUG_PRINTLN("App '%s' connected via BLE", app_name);
+
+    int i = 0;
+    out_frame[i++] = RESP_CODE_SELF_INFO;
+    out_frame[i++] = ADV_TYPE_REPEATER;  // Node type: repeater
+    out_frame[i++] = _prefs.tx_power_dbm;
+    out_frame[i++] = 22;  // MAX_LORA_TX_POWER for SX1262
+    memcpy(&out_frame[i], self_id.pub_key, PUB_KEY_SIZE);
+    i += PUB_KEY_SIZE;
+
+    // Lat/lon (zeros for repeater - no GPS)
+    int32_t lat = 0, lon = 0;
+    memcpy(&out_frame[i], &lat, 4);
+    i += 4;
+    memcpy(&out_frame[i], &lon, 4);
+    i += 4;
+
+    // Additional params (v7+)
+    out_frame[i++] = _prefs.multi_acks;
+    out_frame[i++] = 0;  // advert_loc_policy (no location)
+    out_frame[i++] = 0;  // telemetry modes (none)
+    out_frame[i++] = 0;  // manual_add_contacts (v8+)
+
+    // Radio parameters (required by app)
+    uint32_t freq = _prefs.freq * 1000;
+    memcpy(&out_frame[i], &freq, 4);
+    i += 4;
+    uint32_t bw = _prefs.bw * 1000;
+    memcpy(&out_frame[i], &bw, 4);
+    i += 4;
+    out_frame[i++] = _prefs.sf;
+    out_frame[i++] = _prefs.cr;
+
+    // Node name (variable length, null terminated in source)
+    int tlen = strlen(_prefs.node_name);
+    memcpy(&out_frame[i], _prefs.node_name, tlen);
+    i += tlen;
+
+    _serial->writeFrame(out_frame, i);
+
+    MESH_DEBUG_PRINTLN("Sent SELF_INFO (len=%d)", i);
+
+  } else if (cmd_frame[0] == CMD_GET_CONTACTS) {
+    // App requesting contacts list - repeater has none
+    uint32_t since = 0;
+    if (len >= 5) {
+      memcpy(&since, &cmd_frame[1], 4);  // 'since' timestamp filter
+    }
+
+    MESH_DEBUG_PRINTLN("CMD_GET_CONTACTS (since=%u)", since);
+
+    // Send CONTACTS_START
+    out_frame[0] = RESP_CODE_CONTACTS_START;
+    _serial->writeFrame(out_frame, 1);
+
+    // Immediately send END_OF_CONTACTS (no contacts on repeater)
+    out_frame[0] = RESP_CODE_END_OF_CONTACTS;
+    uint32_t most_recent = 0;  // No contacts, so most recent is 0
+    memcpy(&out_frame[1], &most_recent, 4);
+    _serial->writeFrame(out_frame, 5);
+
+    MESH_DEBUG_PRINTLN("Sent no contacts (repeater)");
+
+  } else if (cmd_frame[0] == CMD_SYNC_NEXT_MESSAGE) {
+    // App requesting next pending message - repeater has none
+    MESH_DEBUG_PRINTLN("CMD_SYNC_NEXT_MESSAGE");
+
+    out_frame[0] = RESP_CODE_NO_MORE_MESSAGES;
+    _serial->writeFrame(out_frame, 1);
+
+    MESH_DEBUG_PRINTLN("Sent NO_MORE_MESSAGES");
+
+  } else if (cmd_frame[0] == CMD_SET_ADVERT_NAME && len >= 2) {
+    // App wants to change node name
+    int nlen = len - 1;
+    if (nlen > sizeof(_prefs.node_name) - 1) nlen = sizeof(_prefs.node_name) - 1;
+    memcpy(_prefs.node_name, &cmd_frame[1], nlen);
+    _prefs.node_name[nlen] = 0;  // null terminator
+    savePrefs();
+    writeOKFrame();
+
+    MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_NAME: '%s'", _prefs.node_name);
+
+  } else if (cmd_frame[0] == CMD_SET_RADIO_PARAMS && len >= 11) {
+    // App wants to change radio parameters
+    int i = 1;
+    uint32_t freq;
+    memcpy(&freq, &cmd_frame[i], 4);
+    i += 4;
+    uint32_t bw;
+    memcpy(&bw, &cmd_frame[i], 4);
+    i += 4;
+    uint8_t sf = cmd_frame[i++];
+    uint8_t cr = cmd_frame[i++];
+
+    // Validate parameters
+    if (freq >= 300000 && freq <= 2500000 && sf >= 5 && sf <= 12 && cr >= 5 && cr <= 8 && bw >= 7000 && bw <= 500000) {
+      _prefs.sf = sf;
+      _prefs.cr = cr;
+      _prefs.freq = (float)freq / 1000.0;
+      _prefs.bw = (float)bw / 1000.0;
+      savePrefs();
+
+      radio_set_params(_prefs.freq, _prefs.bw, _prefs.sf, _prefs.cr);
+      writeOKFrame();
+
+      MESH_DEBUG_PRINTLN("CMD_SET_RADIO_PARAMS: f=%.3f, bw=%.1f, sf=%d, cr=%d", _prefs.freq, _prefs.bw, sf, cr);
+    } else {
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
+      MESH_DEBUG_PRINTLN("CMD_SET_RADIO_PARAMS: Invalid params f=%u, bw=%u, sf=%d, cr=%d", freq, bw, sf, cr);
+    }
+
+  } else if (cmd_frame[0] == CMD_SET_RADIO_TX_POWER && len >= 2) {
+    // App wants to change TX power
+    if (cmd_frame[1] > 22) {  // MAX_LORA_TX_POWER for SX1262
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
+      MESH_DEBUG_PRINTLN("CMD_SET_RADIO_TX_POWER: Invalid power %d", cmd_frame[1]);
+    } else {
+      _prefs.tx_power_dbm = cmd_frame[1];
+      savePrefs();
+      radio_set_tx_power(_prefs.tx_power_dbm);
+      writeOKFrame();
+
+      MESH_DEBUG_PRINTLN("CMD_SET_RADIO_TX_POWER: %d dBm", _prefs.tx_power_dbm);
+    }
+
+  } else if (cmd_frame[0] == CMD_SET_ADVERT_LATLON && len >= 9) {
+    // App wants to set GPS location - repeater doesn't use this but accept it to avoid errors
+    int32_t lat, lon;
+    memcpy(&lat, &cmd_frame[1], 4);
+    memcpy(&lon, &cmd_frame[5], 4);
+
+    // Validate coordinates are reasonable
+    if (lat <= 90 * 1000000 && lat >= -90 * 1000000 && lon <= 180 * 1000000 && lon >= -180 * 1000000) {
+      // Accept but don't save - repeater has no GPS functionality
+      writeOKFrame();
+      MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_LATLON: lat=%.6f, lon=%.6f (accepted but not saved)",
+                         lat/1000000.0, lon/1000000.0);
+    } else {
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
+      MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_LATLON: Invalid coordinates lat=%d, lon=%d", lat, lon);
+    }
+
+  } else {
+    // Unsupported command for repeater
+    MESH_DEBUG_PRINTLN("Unsupported BLE command: %d", cmd_frame[0]);
+    out_frame[0] = RESP_CODE_ERR;
+    out_frame[1] = ERR_CODE_UNSUPPORTED_CMD;  // Error code 1 (was 0xFF causing Error 255)
+    _serial->writeFrame(out_frame, 2);
+  }
 }
