@@ -3,6 +3,14 @@
 
 #include "MyMesh.h"
 
+#ifdef BLE_PIN_CODE
+  #include <helpers/esp32/SerialBLEInterface.h>
+  #ifndef BLE_NAME_PREFIX
+    #define BLE_NAME_PREFIX "MeshCore-"
+  #endif
+  SerialBLEInterface ble_interface;
+#endif
+
 #ifdef DISPLAY_CLASS
   #include "UITask.h"
   static UITask ui_task(display);
@@ -20,8 +28,16 @@ void halt() {
 static char command[160];
 
 void setup() {
-  Serial.begin(115200);
-  delay(1000);
+  // Initialize Serial with explicit UART0 pins for CH340 bridge
+  Serial.end();
+  delay(100);
+  Serial.begin(115200, SERIAL_8N1, 44, 43);
+  delay(500);
+
+  Serial.println("\n=== MeshCore D1L Repeater Boot ===");
+  Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
+  Serial.printf("CPU: %u MHz\n", ESP.getCpuFreqMHz());
+  Serial.flush();
 
   board.begin();
 
@@ -80,6 +96,15 @@ void setup() {
   ui_task.begin(the_mesh.getNodePrefs(), FIRMWARE_BUILD_DATE, FIRMWARE_VERSION);
 #endif
 
+#ifdef BLE_PIN_CODE
+  // Initialize BLE for remote management
+  char ble_name[48];
+  snprintf(ble_name, sizeof(ble_name), "%s%s", BLE_NAME_PREFIX, the_mesh.getNodeName());
+  ble_interface.begin(ble_name, BLE_PIN_CODE);
+  the_mesh.startInterface(ble_interface);
+  Serial.print("BLE advertising as: "); Serial.println(ble_name);
+#endif
+
   // send out initial Advertisement to the mesh
   the_mesh.sendSelfAdvertisement(16000);
 }
@@ -111,6 +136,7 @@ void loop() {
     command[0] = 0;  // reset command buffer
   }
 
+  // BLE interface is now handled inside the_mesh.loop()
   the_mesh.loop();
   sensors.loop();
 #ifdef DISPLAY_CLASS

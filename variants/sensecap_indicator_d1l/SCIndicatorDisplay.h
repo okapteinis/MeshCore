@@ -10,6 +10,11 @@
 #include <lgfx/v1/platforms/esp32s3/Panel_RGB.hpp>
 #include <lgfx/v1/platforms/esp32s3/Bus_RGB.hpp>
 
+#ifdef USE_CUSTOM_RADIOLIB_HAL
+#include "hal/TCA9535_GPIO.h"
+extern TCA9535_GPIO* gpio_expander;  // Shared I2C expander for radio + display
+#endif
+
 class LGFX : public lgfx::LGFX_Device
 {
   lgfx::Panel_ST7701 _panel_instance;
@@ -25,7 +30,11 @@ public:
 
   LGFX(void)
   {
+    Serial.println("[LGFX] Constructor start");
+    Serial.flush();
     {
+        Serial.println("[LGFX] Configuring panel basic settings...");
+        Serial.flush();
         auto cfg = _panel_instance.config();
         cfg.memory_width = 480;
         cfg.memory_height = 480;
@@ -35,14 +44,20 @@ public:
         cfg.offset_y = 0;
         cfg.offset_rotation = 1;
         _panel_instance.config(cfg);
+        Serial.println("[LGFX] Panel basic config done");
+        Serial.flush();
     }
 
     {
+        Serial.println("[LGFX] Configuring panel detail (SPI pins)...");
+        Serial.flush();
         auto cfg = _panel_instance.config_detail();
-        cfg.pin_cs = 4;
+        cfg.pin_cs = -1;  // CS controlled via TCA9535 I2C expander, not direct GPIO
         cfg.pin_sclk = 41;
         cfg.pin_mosi = 48;
 
+        Serial.println("[LGFX] Checking PSRAM...");
+        Serial.flush();
         // PSRAM Runtime Detection
         size_t psram_size = ESP.getPsramSize();
         size_t psram_free = ESP.getFreePsram();
@@ -75,9 +90,13 @@ public:
         }
 
         _panel_instance.config_detail(cfg);
+        Serial.println("[LGFX] Panel detail config done");
+        Serial.flush();
     }
 
     {
+        Serial.println("[LGFX] Configuring Bus_RGB...");
+        Serial.flush();
         auto cfg = _bus_instance.config();
         cfg.panel = &_panel_instance;
 
@@ -119,17 +138,35 @@ public:
         cfg.pin_d15 = 0;
 
         _bus_instance.config(cfg);
+        Serial.println("[LGFX] Bus_RGB config done");
+        Serial.flush();
     }
+
+    Serial.println("[LGFX] Setting bus...");
+    Serial.flush();
     _panel_instance.setBus(&_bus_instance);
+    Serial.println("[LGFX] Bus set");
+    Serial.flush();
 
     {
+        Serial.println("[LGFX] Configuring backlight...");
+        Serial.flush();
         auto cfg = _light_instance.config();
         cfg.pin_bl = 45;
         _light_instance.config(cfg);
+        Serial.println("[LGFX] Backlight config done");
+        Serial.flush();
     }
+
+    Serial.println("[LGFX] Setting light...");
+    Serial.flush();
     _panel_instance.light(&_light_instance);
+    Serial.println("[LGFX] Light set");
+    Serial.flush();
 
     {
+        Serial.println("[LGFX] Configuring touch...");
+        Serial.flush();
         auto cfg = _touch_instance.config();
         cfg.pin_cs = GPIO_NUM_NC;
         cfg.x_min = 0;
@@ -147,10 +184,18 @@ public:
         cfg.pin_scl = 40;
         cfg.freq = 400000;
         _touch_instance.config(cfg);
+        Serial.println("[LGFX] Touch config done");
+        Serial.flush();
         _panel_instance.setTouch(&_touch_instance);
+        Serial.println("[LGFX] Touch set");
+        Serial.flush();
     }
 
+    Serial.println("[LGFX] Setting panel...");
+    Serial.flush();
     setPanel(&_panel_instance);
+    Serial.println("[LGFX] Constructor complete!");
+    Serial.flush();
   }
 };
 
