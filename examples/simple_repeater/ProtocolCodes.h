@@ -46,5 +46,4 @@
 #define COORDS_MULTIPLIER  1000000
 
 // Buffer Sizes
-#define MAX_FRAME_SIZE     256
 #define REPLY_BUFFER_SIZE  160

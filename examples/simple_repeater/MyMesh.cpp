@@ -1307,6 +1307,8 @@ void MyMesh::handleCmdFrame(size_t len) {
 
     MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_NAME: Saving '%s'", _prefs.node_name);
     savePrefs();
+    // Note: savePrefs() does not return error status. If SPIFFS write fails,
+    // settings will not persist across reboot, but we cannot detect this here.
     writeOKFrame();
 
     MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_NAME: Saved successfully");
@@ -1354,6 +1356,8 @@ void MyMesh::handleCmdFrame(size_t len) {
 
       MESH_DEBUG_PRINTLN("CMD_SET_RADIO_PARAMS: Saving f=%.3f, bw=%.1f, sf=%d, cr=%d", _prefs.freq, _prefs.bw, sf, cr);
       savePrefs();
+      // Note: savePrefs() does not return error status. If SPIFFS write fails,
+      // settings will not persist across reboot, but we cannot detect this here.
       radio_set_params(_prefs.freq, _prefs.bw, _prefs.sf, _prefs.cr);
       writeOKFrame();
 
@@ -1373,6 +1377,8 @@ void MyMesh::handleCmdFrame(size_t len) {
 
       MESH_DEBUG_PRINTLN("CMD_SET_RADIO_TX_POWER: Saving %d dBm", _prefs.tx_power_dbm);
       savePrefs();
+      // Note: savePrefs() does not return error status. If SPIFFS write fails,
+      // settings will not persist across reboot, but we cannot detect this here.
       radio_set_tx_power(_prefs.tx_power_dbm);
       writeOKFrame();
 
