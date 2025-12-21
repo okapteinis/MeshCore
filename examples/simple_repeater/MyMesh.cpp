@@ -1,32 +1,6 @@
 #include "MyMesh.h"
 #include <algorithm>
-
-/* ------------------------ Serial Protocol Commands -------------------- */
-// Binary protocol commands for app connection (minimal subset for repeater)
-#define CMD_APP_START                 1
-#define CMD_GET_CONTACTS              4
-#define CMD_SET_ADVERT_NAME           8
-#define CMD_SYNC_NEXT_MESSAGE         10
-#define CMD_SET_RADIO_PARAMS          11
-#define CMD_SET_RADIO_TX_POWER        12
-#define CMD_SET_ADVERT_LATLON         14
-#define CMD_DEVICE_QEURY              22
-
-#define RESP_CODE_OK                  0
-#define RESP_CODE_ERR                 1
-#define RESP_CODE_CONTACTS_START      2
-#define RESP_CODE_END_OF_CONTACTS     4
-#define RESP_CODE_SELF_INFO           5
-#define RESP_CODE_NO_MORE_MESSAGES    10
-#define RESP_CODE_DEVICE_INFO         13
-
-// Error codes (1-10)
-#define ERR_CODE_UNSUPPORTED_CMD      1
-#define ERR_CODE_FILE_IO_ERROR        5
-#define ERR_CODE_ILLEGAL_ARG          6
-
-#define FIRMWARE_VER_CODE             8   // Protocol version
-#define ADV_TYPE_REPEATER             6   // Repeater node type
+#include <helpers/ProtocolCodes.h>
 
 /* ------------------------------ Config -------------------------------- */
 
@@ -45,6 +19,9 @@
 #ifndef LORA_TX_POWER
   #define LORA_TX_POWER 20
 #endif
+
+#define MAX_LORA_TX_POWER  22  // Maximum TX power for SX1262 (dBm)
+#define REPLY_BUFFER_SIZE  160 // Size of reply buffer for CLI commands
 
 #ifndef ADVERT_NAME
   #define ADVERT_NAME "repeater"
@@ -351,7 +328,7 @@ const char *MyMesh::getLogDateTime() {
   static char tmp[32];
   uint32_t now = getRTCClock()->getCurrentTime();
   DateTime dt = DateTime(now);
-  sprintf(tmp, "%02d:%02d:%02d - %d/%d/%d U", dt.hour(), dt.minute(), dt.second(), dt.day(), dt.month(),
+  snprintf(tmp, sizeof(tmp), "%02d:%02d:%02d - %d/%d/%d U", dt.hour(), dt.minute(), dt.second(), dt.day(), dt.month(),
           dt.year());
   return tmp;
 }
@@ -875,13 +852,17 @@ void MyMesh::formatNeighborsReply(char *reply) {
 
     // add next neighbour
     uint32_t secs_ago = getRTCClock()->getCurrentTime() - neighbour->heard_timestamp;
-    sprintf(dp, "%s:%d:%d", hex, secs_ago, neighbour->snr);
-    while (*dp)
-      dp++; // find end of string
+    size_t remaining = 160 - (dp - reply);  // reply buffer is 160 bytes
+    int written = snprintf(dp, remaining, "%s:%d:%d", hex, secs_ago, neighbour->snr);
+    if (written > 0 && (size_t)written < remaining) {
+      dp += written;
+    }
   }
 #endif
   if (dp == reply) { // no neighbours, need empty response
-    strcpy(dp, "-none-");
+    size_t remaining = 160 - (dp - reply);
+    strncpy(dp, "-none-", remaining);
+    dp[std::min((size_t)6, remaining - 1)] = '\0';  // Ensure null termination
     dp += 6;
   }
   *dp = 0; // null terminator
@@ -937,7 +918,7 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
       region_map = temp_map;  // copy over the temp instance as new current map
       region_load_active = false;
 
-      sprintf(reply, "OK - loaded %d regions", region_map.getCount());
+      snprintf(reply, 160, "OK - loaded %d regions", region_map.getCount());
     } else {
       char *np = command;
       while (*np == ' ') np++;   // skip indent
@@ -979,7 +960,8 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
     char* hex = &command[8];
     char* sp = strchr(hex, ' ');   // look for separator char
     if (sp == NULL) {
-      strcpy(reply, "Err - bad params");
+      strncpy(reply, "Err - bad params", 159);
+      reply[159] = '\0';
     } else {
       *sp++ = 0;   // replace space with null terminator
 
@@ -989,12 +971,15 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
         uint8_t perms = atoi(sp);
         if (acl.applyPermissions(self_id, pubkey, hex_len / 2, perms)) {
           dirty_contacts_expiry = futureMillis(LAZY_CONTACTS_WRITE_DELAY);   // trigger acl.save()
-          strcpy(reply, "OK");
+          strncpy(reply, "OK", 159);
+          reply[159] = '\0';
         } else {
-          strcpy(reply, "Err - invalid params");
+          strncpy(reply, "Err - invalid params", 159);
+          reply[159] = '\0';
         }
       } else {
-        strcpy(reply, "Err - bad pubkey");
+        strncpy(reply, "Err - bad pubkey", 159);
+        reply[159] = '\0';
       }
     }
   } else if (sender_timestamp == 0 && strcmp(command, "get acl") == 0) {
@@ -1024,71 +1009,85 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
       _prefs.discovery_mod_timestamp = rtc_clock.getCurrentTime();   // this node is now 'modified' (for discovery info)
       savePrefs();
       bool success = region_map.save(_fs);
-      strcpy(reply, success ? "OK" : "Err - save failed");
+      strncpy(reply, success ? "OK" : "Err - save failed", 159);
+      reply[159] = '\0';
     } else if (n >= 3 && strcmp(parts[1], "allowf") == 0) {
       auto region = region_map.findByNamePrefix(parts[2]);
       if (region) {
         region->flags &= ~REGION_DENY_FLOOD;
-        strcpy(reply, "OK");
+        strncpy(reply, "OK", 159);
+        reply[159] = '\0';
       } else {
-        strcpy(reply, "Err - unknown region");
+        strncpy(reply, "Err - unknown region", 159);
+        reply[159] = '\0';
       }
     } else if (n >= 3 && strcmp(parts[1], "denyf") == 0) {
       auto region = region_map.findByNamePrefix(parts[2]);
       if (region) {
         region->flags |= REGION_DENY_FLOOD;
-        strcpy(reply, "OK");
+        strncpy(reply, "OK", 159);
+        reply[159] = '\0';
       } else {
-        strcpy(reply, "Err - unknown region");
+        strncpy(reply, "Err - unknown region", 159);
+        reply[159] = '\0';
       }
     } else if (n >= 3 && strcmp(parts[1], "get") == 0) {
       auto region = region_map.findByNamePrefix(parts[2]);
       if (region) {
         auto parent = region_map.findById(region->parent);
         if (parent && parent->id != 0) {
-          sprintf(reply, " %s (%s) %s", region->name, parent->name, (region->flags & REGION_DENY_FLOOD) ? "" : "F");
+          snprintf(reply, 160, " %s (%s) %s", region->name, parent->name, (region->flags & REGION_DENY_FLOOD) ? "" : "F");
         } else {
-          sprintf(reply, " %s %s", region->name, (region->flags & REGION_DENY_FLOOD) ? "" : "F");
+          snprintf(reply, 160, " %s %s", region->name, (region->flags & REGION_DENY_FLOOD) ? "" : "F");
         }
       } else {
-        strcpy(reply, "Err - unknown region");
+        strncpy(reply, "Err - unknown region", 159);
+        reply[159] = '\0';
       }
     } else if (n >= 3 && strcmp(parts[1], "home") == 0) {
       auto home = region_map.findByNamePrefix(parts[2]);
       if (home) {
         region_map.setHomeRegion(home);
-        sprintf(reply, " home is now %s", home->name);
+        snprintf(reply, 160, " home is now %s", home->name);
       } else {
-        strcpy(reply, "Err - unknown region");
+        strncpy(reply, "Err - unknown region", 159);
+        reply[159] = '\0';
       }
     } else if (n == 2 && strcmp(parts[1], "home") == 0) {
       auto home = region_map.getHomeRegion();
-      sprintf(reply, " home is %s", home ? home->name : "*");
+      snprintf(reply, 160, " home is %s", home ? home->name : "*");
     } else if (n >= 3 && strcmp(parts[1], "put") == 0) {
       auto parent = n >= 4 ? region_map.findByNamePrefix(parts[3]) : &region_map.getWildcard();
       if (parent == NULL) {
-        strcpy(reply, "Err - unknown parent");
+        strncpy(reply, "Err - unknown parent", 159);
+        reply[159] = '\0';
       } else {
         auto region = region_map.putRegion(parts[2], parent->id);
         if (region == NULL) {
-          strcpy(reply, "Err - unable to put");
+          strncpy(reply, "Err - unable to put", 159);
+          reply[159] = '\0';
         } else {
-          strcpy(reply, "OK");
+          strncpy(reply, "OK", 159);
+          reply[159] = '\0';
         }
       }
     } else if (n >= 3 && strcmp(parts[1], "remove") == 0) {
       auto region = region_map.findByName(parts[2]);
       if (region) {
         if (region_map.removeRegion(*region)) {
-          strcpy(reply, "OK");
+          strncpy(reply, "OK", 159);
+          reply[159] = '\0';
         } else {
-          strcpy(reply, "Err - not empty");
+          strncpy(reply, "Err - not empty", 159);
+          reply[159] = '\0';
         }
       } else {
-        strcpy(reply, "Err - not found");
+        strncpy(reply, "Err - not found", 159);
+        reply[159] = '\0';
       }
     } else {
-      strcpy(reply, "Err - ??");
+      strncpy(reply, "Err - ??", 159);
+      reply[159] = '\0';
     }
   } else{
     _cli.handleCommand(sender_timestamp, command, reply);  // common CLI commands
@@ -1147,12 +1146,16 @@ void MyMesh::loop() {
 /* -------------------- Serial Interface Methods (BLE/WiFi) -------------------- */
 
 void MyMesh::writeOKFrame() {
+  if (!_serial) return;  // No serial interface configured
+
   uint8_t buf[1];
   buf[0] = RESP_CODE_OK;
   _serial->writeFrame(buf, 1);
 }
 
 void MyMesh::writeErrFrame(uint8_t err_code) {
+  if (!_serial) return;  // No serial interface configured
+
   uint8_t buf[2];
   buf[0] = RESP_CODE_ERR;
   buf[1] = err_code;
@@ -1166,6 +1169,10 @@ void MyMesh::startInterface(BaseSerialInterface &serial) {
 }
 
 void MyMesh::checkSerialInterface() {
+  if (!_serial) {
+    return;  // No serial interface configured
+  }
+
   size_t len = _serial->checkRecvFrame(cmd_frame);
   if (len > 0) {
     handleCmdFrame(len);
@@ -1173,8 +1180,11 @@ void MyMesh::checkSerialInterface() {
 }
 
 void MyMesh::handleCmdFrame(size_t len) {
+  MESH_DEBUG_PRINTLN("handleCmdFrame: cmd=%d, len=%d", cmd_frame[0], len);
+
   if (cmd_frame[0] == CMD_DEVICE_QEURY && len >= 2) {
     // App sent device query - respond with device info
+    MESH_DEBUG_PRINTLN("CMD_DEVICE_QEURY: app_ver=%d", cmd_frame[1]);
     app_target_ver = cmd_frame[1];  // Protocol version the app understands
 
     int i = 0;
@@ -1187,12 +1197,15 @@ void MyMesh::handleCmdFrame(size_t len) {
     i += 4;
     memset(&out_frame[i], 0, 12);
     strncpy((char *)&out_frame[i], FIRMWARE_BUILD_DATE, 12);
+    out_frame[i + 11] = '\0';  // Ensure null termination
     i += 12;
     memset(&out_frame[i], 0, 40);
     strncpy((char *)&out_frame[i], "SenseCAP Indicator D1L", 40);
+    out_frame[i + 39] = '\0';  // Ensure null termination
     i += 40;
     memset(&out_frame[i], 0, 20);
     strncpy((char *)&out_frame[i], FIRMWARE_VERSION, 20);
+    out_frame[i + 19] = '\0';  // Ensure null termination
     i += 20;
     _serial->writeFrame(out_frame, i);
 
@@ -1200,6 +1213,14 @@ void MyMesh::handleCmdFrame(size_t len) {
 
   } else if (cmd_frame[0] == CMD_APP_START && len >= 8) {
     // App sent connection start - respond with node self info
+
+    // Validate buffer bounds before null termination
+    if (len >= MAX_FRAME_SIZE) {
+      MESH_DEBUG_PRINTLN("ERROR: Buffer overflow prevented in CMD_APP_START (len=%d)", len);
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
+      return;
+    }
+
     char *app_name = (char *)&cmd_frame[8];
     cmd_frame[len] = 0;  // null terminate app name
     MESH_DEBUG_PRINTLN("App '%s' connected via BLE", app_name);
@@ -1208,7 +1229,7 @@ void MyMesh::handleCmdFrame(size_t len) {
     out_frame[i++] = RESP_CODE_SELF_INFO;
     out_frame[i++] = ADV_TYPE_REPEATER;  // Node type: repeater
     out_frame[i++] = _prefs.tx_power_dbm;
-    out_frame[i++] = 22;  // MAX_LORA_TX_POWER for SX1262
+    out_frame[i++] = MAX_LORA_TX_POWER;
     memcpy(&out_frame[i], self_id.pub_key, PUB_KEY_SIZE);
     i += PUB_KEY_SIZE;
 
@@ -1292,11 +1313,30 @@ void MyMesh::handleCmdFrame(size_t len) {
     // App wants to change radio parameters
     int i = 1;
     uint32_t freq;
+
+    // Validate buffer bounds before each memcpy
+    if (i + 4 > len) {
+      MESH_DEBUG_PRINTLN("ERROR: Buffer overflow prevented in CMD_SET_RADIO_PARAMS (freq)");
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
+      return;
+    }
     memcpy(&freq, &cmd_frame[i], 4);
     i += 4;
+
     uint32_t bw;
+    if (i + 4 > len) {
+      MESH_DEBUG_PRINTLN("ERROR: Buffer overflow prevented in CMD_SET_RADIO_PARAMS (bw)");
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
+      return;
+    }
     memcpy(&bw, &cmd_frame[i], 4);
     i += 4;
+
+    if (i + 2 > len) {
+      MESH_DEBUG_PRINTLN("ERROR: Buffer overflow prevented in CMD_SET_RADIO_PARAMS (sf/cr)");
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
+      return;
+    }
     uint8_t sf = cmd_frame[i++];
     uint8_t cr = cmd_frame[i++];
 
@@ -1322,7 +1362,7 @@ void MyMesh::handleCmdFrame(size_t len) {
 
   } else if (cmd_frame[0] == CMD_SET_RADIO_TX_POWER && len >= 2) {
     // App wants to change TX power
-    if (cmd_frame[1] > 22) {  // MAX_LORA_TX_POWER for SX1262
+    if (cmd_frame[1] > MAX_LORA_TX_POWER) {
       writeErrFrame(ERR_CODE_ILLEGAL_ARG);
       MESH_DEBUG_PRINTLN("CMD_SET_RADIO_TX_POWER: Invalid power %d", cmd_frame[1]);
     } else {
@@ -1341,6 +1381,14 @@ void MyMesh::handleCmdFrame(size_t len) {
   } else if (cmd_frame[0] == CMD_SET_ADVERT_LATLON && len >= 9) {
     // App wants to set GPS location - repeater doesn't use this but accept it to avoid errors
     int32_t lat, lon;
+
+    // Validate buffer bounds before memcpy
+    if (1 + 4 > len || 5 + 4 > len) {
+      MESH_DEBUG_PRINTLN("ERROR: Buffer overflow prevented in CMD_SET_ADVERT_LATLON");
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
+      return;
+    }
+
     memcpy(&lat, &cmd_frame[1], 4);
     memcpy(&lon, &cmd_frame[5], 4);
 

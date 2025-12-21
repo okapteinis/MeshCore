@@ -4,13 +4,15 @@ bool LGFXDisplay::begin() {
   turnOn();
   display->init();
   display->setRotation(1);
-  display->setBrightness(64);
+  display->setBrightness(255);  // Full brightness for debugging
   display->setColorDepth(8);
   display->setTextColor(TFT_WHITE);
 
-  buffer.setColorDepth(8);
-  buffer.setPsram(true);
-  buffer.createSprite(width(), height());
+  // Draw directly to display, no sprite buffer (avoids PSRAM dependency)
+  // The RGB parallel interface is fast enough for direct drawing
+  // buffer.setColorDepth(8);
+  // buffer.setPsram(true);
+  // buffer.createSprite(width(), height());
 
   return true;
 }
@@ -31,19 +33,17 @@ void LGFXDisplay::turnOff() {
 }
 
 void LGFXDisplay::clear() {
-//  display->clearDisplay();
-  buffer.clearDisplay();
+  display->clear();
 }
 
 void LGFXDisplay::startFrame(Color bkg) {
-//  display->startWrite();
-//  display->getScanLine();
-  buffer.clearDisplay();
-  buffer.setTextColor(TFT_WHITE);
+  display->startWrite();
+  display->clear();
+  display->setTextColor(TFT_WHITE);
 }
 
 void LGFXDisplay::setTextSize(int sz) {
-  buffer.setTextSize(sz);
+  display->setTextSize(sz);
 }
 
 void LGFXDisplay::setColor(Color c) {
@@ -73,41 +73,37 @@ void LGFXDisplay::setColor(Color c) {
     default:
       _color = TFT_WHITE;
   }
-  buffer.setTextColor(_color);
+  display->setTextColor(_color);
 }
 
 void LGFXDisplay::setCursor(int x, int y) {
-  buffer.setCursor(x, y);
+  display->setCursor(x, y);
 }
 
 void LGFXDisplay::print(const char* str) {
-  buffer.println(str);
+  display->println(str);
 //  Serial.println(str);
 }
 
 void LGFXDisplay::fillRect(int x, int y, int w, int h) {
-  buffer.fillRect(x, y, w, h, _color);
+  display->fillRect(x, y, w, h, _color);
 }
 
 void LGFXDisplay::drawRect(int x, int y, int w, int h) {
-  buffer.drawRect(x, y, w, h, _color);
+  display->drawRect(x, y, w, h, _color);
 }
 
 void LGFXDisplay::drawXbm(int x, int y, const uint8_t* bits, int w, int h) {
-  buffer.drawBitmap(x, y, bits, w, h, _color);
+  display->drawBitmap(x, y, bits, w, h, _color);
 }
 
 uint16_t LGFXDisplay::getTextWidth(const char* str) {
-  return buffer.textWidth(str);
+  return display->textWidth(str);
 }
 
 void LGFXDisplay::endFrame() {
-  display->startWrite();
-  if (UI_ZOOM != 1) {
-    buffer.pushRotateZoom(display, display->width()/2, display->height()/2 , 0, UI_ZOOM, UI_ZOOM);
-  } else {
-    buffer.pushSprite(display, 0, 0);
-  }
+  // Drawing directly to display, just end the write transaction
+  // UI_ZOOM scaling not supported in direct draw mode
   display->endWrite();
 }
 

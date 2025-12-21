@@ -25,6 +25,7 @@
 
 #include <helpers/AdvertDataHelpers.h>
 #include <helpers/ArduinoHelpers.h>
+#include <helpers/BaseSerialInterface.h>
 #include <helpers/ClientACL.h>
 #include <helpers/CommonCLI.h>
 #include <helpers/IdentityStore.h>
@@ -112,7 +113,17 @@ class MyMesh : public mesh::Mesh, public CommonCLICallbacks {
   ESPNowBridge bridge;
 #endif
 
+  // Serial interface support (for BLE/WiFi app connection)
+  BaseSerialInterface* _serial;
+  uint8_t cmd_frame[MAX_FRAME_SIZE];
+  uint8_t out_frame[MAX_FRAME_SIZE];
+  uint8_t app_target_ver;
+
   void putNeighbour(const mesh::Identity& id, uint32_t timestamp, float snr);
+  void handleCmdFrame(size_t len);
+  void checkSerialInterface();
+  void writeOKFrame();
+  void writeErrFrame(uint8_t err_code);
   uint8_t handleLoginReq(const mesh::Identity& sender, const uint8_t* secret, uint32_t sender_timestamp, const uint8_t* data, bool is_flood);
   int handleRequest(ClientInfo* sender, uint32_t sender_timestamp, uint8_t* payload, size_t payload_len);
   mesh::Packet* createSelfAdvert();
@@ -166,6 +177,7 @@ public:
   MyMesh(mesh::MainBoard& board, mesh::Radio& radio, mesh::MillisecondClock& ms, mesh::RNG& rng, mesh::RTCClock& rtc, mesh::MeshTables& tables);
 
   void begin(FILESYSTEM* fs);
+  void startInterface(BaseSerialInterface &serial);
 
   const char* getFirmwareVer() override { return FIRMWARE_VERSION; }
   const char* getBuildDate() override { return FIRMWARE_BUILD_DATE; }

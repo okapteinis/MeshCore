@@ -29,6 +29,11 @@ extern ESP32RTCClock fallback_clock;
 extern AutoDiscoverRTCClock rtc_clock;
 extern EnvironmentSensorManager sensors;
 
+#ifdef USE_CUSTOM_RADIOLIB_HAL
+class TCA9535_GPIO;  // Forward declaration
+extern TCA9535_GPIO* gpio_expander;  // Shared I2C expander for radio + display
+#endif
+
 #ifdef DISPLAY_CLASS
 extern DISPLAY_CLASS display;
 extern MomentaryButton user_btn;

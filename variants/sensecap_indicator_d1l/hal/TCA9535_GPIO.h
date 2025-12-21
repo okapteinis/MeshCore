@@ -80,6 +80,10 @@ public:
     static const uint16_t LORA_DIO0 = 102;   // TCA9535 P0_2 - LoRa BUSY (DIO0 on SX1262)
     static const uint16_t LORA_DIO1 = 103;   // TCA9535 P0_3 - LoRa DIO1 (IRQ)
 
+    // Display control pins (shared TCA9535 at 0x20)
+    static const uint16_t DISPLAY_CS = 104;   // TCA9535 P0_4 - ST7701 Chip Select
+    static const uint16_t DISPLAY_RST = 105;  // TCA9535 P0_5 - ST7701 Reset
+
     /**
      * Constructor
      *
@@ -182,6 +186,20 @@ public:
         Serial.printf("  RESET (pin %d): OUTPUT, HIGH\n", LORA_RESET);
         Serial.printf("  BUSY (pin %d): INPUT\n", LORA_DIO0);
         Serial.printf("  DIO1 (pin %d): INPUT\n", LORA_DIO1);
+
+        // Configure Display control pins
+        Serial.println("[TCA9535] Configuring Display control pins...");
+
+        // CS: Output, HIGH (deselected - important for ST7701 init)
+        pinMode(DISPLAY_CS, OUTPUT);
+        digitalWrite(DISPLAY_CS, HIGH);
+
+        // RST: Output, HIGH (not in reset)
+        pinMode(DISPLAY_RST, OUTPUT);
+        digitalWrite(DISPLAY_RST, HIGH);
+
+        Serial.printf("  Display CS (pin %d / P0_4): OUTPUT, HIGH\n", DISPLAY_CS);
+        Serial.printf("  Display RST (pin %d / P0_5): OUTPUT, HIGH\n", DISPLAY_RST);
 
         return true;
     }

@@ -53,7 +53,7 @@ static SPIClass spi;
 
 // HAL Objects (initialized in radio_init)
 #ifdef USE_CUSTOM_RADIOLIB_HAL
-static TCA9535_GPIO* gpio_expander = nullptr;
+TCA9535_GPIO* gpio_expander = nullptr;  // Now globally accessible (extern in target.h)
 static CustomRadioLibHal* custom_hal = nullptr;
 #endif
 
@@ -253,20 +253,14 @@ bool testMapAccess() {
 // ============================================================================
 
 bool radio_init() {
-  // Early Boot Diagnostics
-  if (!Serial) {
-    Serial.begin(Config::SERIAL_BAUD_RATE);
-    delay(Config::SERIAL_INIT_DELAY_MS);
+  // Serial is already initialized in main.cpp before calling this function
+  // No need to reinitialize here - it would break the UART0 pin mapping
 
-    uint32_t start = millis();
-    while (!Serial && (millis() - start < Config::SERIAL_CONNECT_TIMEOUT_MS)) {
-      delay(10);
-    }
-  }
+  // Serial.println("========================================");  // REMOVED
+  // Serial.println("RADIO INIT START");  // REMOVED
+  // Serial.println("========================================");  // REMOVED
 
-  Serial.println("\n\nSENSECAP D1L BOOT DIAGNOSTICS");
-  Serial.println("========================================");
-  Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
+  /* PSRAM checks disabled for D1L
   Serial.printf("PSRAM size: %u bytes\n", ESP.getPsramSize());
   Serial.printf("PSRAM free: %u bytes\n", ESP.getFreePsram());
 
@@ -278,10 +272,11 @@ bool radio_init() {
                   ESP.getPsramSize() / 1024.0 / 1024.0,
                   ESP.getFreePsram() / 1024.0 / 1024.0);
   }
+  */
 
-  Serial.printf("CPU: %u MHz\n", ESP.getCpuFreqMHz());
-  Serial.printf("Flash: %u bytes\n", ESP.getFlashChipSize());
-  Serial.println("========================================\n");
+  // Serial.printf("CPU: %u MHz\n", ESP.getCpuFreqMHz());  // REMOVED
+  // Serial.printf("Flash: %u bytes\n", ESP.getFlashChipSize());  // REMOVED
+  // Serial.println("========================================\n");  // REMOVED
 
   // Initialize I2C Mutex
   if (i2c_bus_mutex == nullptr) {
@@ -289,20 +284,20 @@ bool radio_init() {
     if (i2c_bus_mutex == nullptr) {
       return fail_and_cleanup("Failed to create I2C mutex");
     }
-    Serial.println("I2C bus mutex created");
+    // Serial.println("I2C bus mutex created");  // REMOVED
   }
 
   // SPIFFS Storage Test
-  Serial.println("\n========================================");
-  Serial.println("Phase 0A: SPIFFS Storage Test");
-  Serial.println("========================================");
+  // Serial.println("\n========================================");  // REMOVED
+  // Serial.println("Phase 0A: SPIFFS Storage Test");  // REMOVED
+  // Serial.println("========================================");  // REMOVED
   if (!initStorage()) {
-    Serial.println("SPIFFS init failed - continuing anyway");
+    // Serial.println("SPIFFS init failed - continuing anyway");  // REMOVED
   } else {
-    Serial.println("SPIFFS initialized");
+    // Serial.println("SPIFFS initialized");  // REMOVED
     testMapAccess();
   }
-  Serial.println("========================================\n");
+  // Serial.println("========================================\n");  // REMOVED
 
   // Initialize Clocks
   fallback_clock.begin();
@@ -310,7 +305,7 @@ bool radio_init() {
 
   // Initialize HAL
 #ifdef USE_CUSTOM_RADIOLIB_HAL
-  Serial.println("\nInitializing TCA9535 HAL");
+  // Serial.println("\nInitializing TCA9535 HAL");  // REMOVED - causes crash
 
   {
     I2C_Lock lock;
@@ -322,8 +317,8 @@ bool radio_init() {
       return fail_and_cleanup("I2C initialization failed");
     }
   }
-  Serial.printf("I2C: SDA=%d, SCL=%d, Freq=%u Hz\n",
-                PIN_BOARD_SDA, PIN_BOARD_SCL, TCA9535_I2C_FREQ);
+  // Serial.printf("I2C: SDA=%d, SCL=%d, Freq=%u Hz\n",
+  //               PIN_BOARD_SDA, PIN_BOARD_SCL, TCA9535_I2C_FREQ);  // REMOVED
 
   gpio_expander = new TCA9535_GPIO(TCA9535_I2C_ADDR);
   {
@@ -334,35 +329,35 @@ bool radio_init() {
       return fail_and_cleanup("TCA9535 init failed");
     }
   }
-  Serial.printf("TCA9535 at I2C 0x%02X\n", TCA9535_I2C_ADDR);
-  Serial.println();
+  // Serial.printf("TCA9535 at I2C 0x%02X\n", TCA9535_I2C_ADDR);  // REMOVED
+  // Serial.println();  // REMOVED
 #else
-  Serial.println("WARNING: USE_CUSTOM_RADIOLIB_HAL not defined!");
-  Serial.println("Radio will likely fail without HAL!\n");
+  // Serial.println("WARNING: USE_CUSTOM_RADIOLIB_HAL not defined!");  // REMOVED
+  // Serial.println("Radio will likely fail without HAL!\n");  // REMOVED
 #endif
 
   // Initialize SPI
-  Serial.println("\nInitializing SPI Bus");
+  // Serial.println("\nInitializing SPI Bus");  // REMOVED
   spi.begin(LORA_SCK, LORA_MISO, LORA_MOSI);
-  Serial.printf("SPI: SCK=%d, MISO=%d, MOSI=%d\n", LORA_SCK, LORA_MISO, LORA_MOSI);
+  // Serial.printf("SPI: SCK=%d, MISO=%d, MOSI=%d\n", LORA_SCK, LORA_MISO, LORA_MOSI);  // REMOVED
 
 #ifdef USE_CUSTOM_RADIOLIB_HAL
   // Create HAL with SPI settings
   SPISettings spiSettings(2000000, MSBFIRST, SPI_MODE0);
   custom_hal = new CustomRadioLibHal(gpio_expander, spi, spiSettings);
   custom_hal->init();
-  Serial.println("HAL initialized with SPI settings");
+  // Serial.println("HAL initialized with SPI settings");  // REMOVED
 #endif
 
   // Initialize Radio
-  Serial.println("\nInitializing SX1262 Radio");
-  Serial.printf("  SPI pins (direct): SCK=%d, MISO=%d, MOSI=%d\n",
-                LORA_SCK, LORA_MISO, LORA_MOSI);
-  Serial.printf("  Control pins (virtual): CS=%d, DIO1=%d, RST=%d, BUSY=%d\n",
-                TCA9535_GPIO::LORA_NSS, TCA9535_GPIO::LORA_DIO1,
-                TCA9535_GPIO::LORA_RESET, TCA9535_GPIO::LORA_DIO0);
+  // Serial.println("\nInitializing SX1262 Radio");  // REMOVED
+  // Serial.printf("  SPI pins (direct): SCK=%d, MISO=%d, MOSI=%d\n",
+  //               LORA_SCK, LORA_MISO, LORA_MOSI);  // REMOVED
+  // Serial.printf("  Control pins (virtual): CS=%d, DIO1=%d, RST=%d, BUSY=%d\n",
+  //               TCA9535_GPIO::LORA_NSS, TCA9535_GPIO::LORA_DIO1,
+  //               TCA9535_GPIO::LORA_RESET, TCA9535_GPIO::LORA_DIO0);  // REMOVED
 #ifdef USE_CUSTOM_RADIOLIB_HAL
-  Serial.printf("  TCA9535 I2C: 0x%02X\n", TCA9535_I2C_ADDR);
+  // Serial.printf("  TCA9535 I2C: 0x%02X\n", TCA9535_I2C_ADDR);  // REMOVED
 #endif
 
   if (radio == nullptr) {
