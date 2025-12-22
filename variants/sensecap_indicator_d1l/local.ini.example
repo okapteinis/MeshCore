@@ -1,0 +1,32 @@
+; Local configuration template for SenseCAP Indicator D1L
+; Copy this file to local.ini and customize for your deployment
+; Note: local.ini is gitignored to prevent committing personal settings
+
+[env:SenseCapIndicator-D1L_repeater_custom]
+extends = env:SenseCapIndicator-D1L_repeater
+
+; Override device name at build time (optional)
+; Leave commented to configure via BLE app/CLI at runtime (recommended)
+; build_flags =
+;   ${env:SenseCapIndicator-D1L_repeater.build_flags}
+;   -D ADVERT_NAME=\"MyCustomRepeater\"
+
+; Override admin password at build time (optional)
+; WARNING: Only use for testing. Configure via CLI in production.
+; build_flags =
+;   ${env:SenseCapIndicator-D1L_repeater.build_flags}
+;   -D ADMIN_PASSWORD=\"MySecurePassword123\"
+
+; Override upload port if different from default
+; upload_port = /dev/cu.usbserial-XXXX
+
+; Enable debug logging
+; build_flags =
+;   ${env:SenseCapIndicator-D1L_repeater.build_flags}
+;   -D CORE_DEBUG_LEVEL=4
+
+; Custom LoRa parameters (expert users only)
+; build_flags =
+;   ${env:SenseCapIndicator-D1L_repeater.build_flags}
+;   -D LORA_TX_POWER=20
+;   -D MAX_NEIGHBOURS=100

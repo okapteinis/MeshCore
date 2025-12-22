@@ -1,0 +1,42 @@
+name: Security Scan
+
+on: [push, pull_request]
+
+jobs:
+  scan-secrets:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check for exposed secrets
+      run: |
+        echo "Scanning for hardcoded passwords..."
+        if grep -r "mKw1hwmI" .; then
+          echo "ERROR: Found exposed password in code!"
+          exit 1
+        fi
+
+        echo "Scanning for private keys..."
+        if grep -r "BEGIN RSA PRIVATE KEY\|BEGIN PRIVATE KEY" .; then
+          echo "ERROR: Found private key in code!"
+          exit 1
+        fi
+
+        echo "Scanning for hardcoded device names..."
+        if grep -r "ADVERT_NAME.*Avotiela" variants/; then
+          echo "WARNING: Found hardcoded location-specific device name"
+          exit 1
+        fi
+
+        echo "Security scan passed - no secrets found"
+
+    - name: Check for common security issues
+      run: |
+        echo "Checking for unsafe string operations..."
+        if grep -r "strcpy\|strcat\|sprintf" src/ examples/; then
+          echo "WARNING: Found potentially unsafe string operations"
+        fi
+        echo "Security check complete"

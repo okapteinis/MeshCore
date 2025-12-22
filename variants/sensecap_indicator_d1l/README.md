@@ -41,6 +41,73 @@ This variant adds support for the **Seeed Studio SenseCAP Indicator D1L** to Mes
 - **Sensors**: RP2040 sensor coprocessor (temperature, humidity, CO2)
 - **Connectivity**: Wi-Fi, Bluetooth, LoRa
 
+## Firmware Variants
+
+### Companion (SenseCapIndicator-D1L_companion)
+For use with MeshCore mobile apps via BLE or WiFi.
+
+Build command:
+```bash
+pio run -e SenseCapIndicator-D1L_companion
+```
+
+### Repeater (SenseCapIndicator-D1L_repeater)
+Standalone repeater for extending network coverage.
+
+Build command:
+```bash
+pio run -e SenseCapIndicator-D1L_repeater
+```
+
+## Configuration
+
+### Runtime Configuration (Recommended)
+1. Flash firmware to device
+2. Connect via BLE using MeshCore app
+3. Set admin password (default: 123456)
+4. Configure device name and other settings through the app
+
+### Build-time Configuration (Advanced)
+For custom builds, copy `local.ini.example` to `local.ini` and customize:
+```bash
+cp local.ini.example local.ini
+nano local.ini
+pio run -e SenseCapIndicator-D1L_repeater_custom
+```
+
+**Note:** `local.ini` is gitignored to prevent committing personal settings.
+
+### Radio Configuration
+
+Default EU Narrow mode settings:
+- Frequency: 869.618 MHz
+- Bandwidth: 62.5 kHz
+- Spreading Factor: SF8
+- Coding Rate: CR 4/8
+- TX Power: 22 dBm
+
+## Flashing
+
+Via USB-C:
+```bash
+pio run -e SenseCapIndicator-D1L_repeater --target upload
+```
+
+## Troubleshooting
+
+### Device not detected
+- Ensure USB-C cable supports data (not charge-only)
+- Check serial port: `ls /dev/cu.usbserial-*` (macOS) or `ls /dev/ttyUSB*` (Linux)
+
+### Build fails with size errors
+- Partition scheme is set to huge_app.csv (6MB app space)
+- If still too large, reduce CORE_DEBUG_LEVEL in platformio.ini
+
+### Cannot connect via BLE
+- Verify device is advertising: should see "MeshCore-XXXX" in BLE scanner
+- Ensure device is in range (BLE ~10m max)
+- Check battery if not USB powered
+
 ## Custom HAL Implementation
 
 ### Overview

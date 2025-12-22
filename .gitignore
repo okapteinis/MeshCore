@@ -14,3 +14,28 @@ cmake-*
 .cache
 .ccls
 compile_commands.json
+
+# Local configuration overrides (added for D1L development)
+variants/*/local.ini
+variants/*/local_*.h
+variants/*/local_*.cpp
+platformio_local.ini
+
+# Secrets and credentials
+**/passwords.txt
+**/credentials.h
+**/secrets.ini
+
+# Build artifacts (ensure these are ignored)
+*.bin
+*.elf
+*.hex
+
+# IDE specific
+*.swp
+*.swo
+*~
+
+# Python cache
+__pycache__/
+*.pyc

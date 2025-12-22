@@ -85,6 +85,40 @@ This directory contains the custom RadioLib HAL implementation for SenseCAP Indi
 
 ---
 
+## Thread Safety
+
+All TCA9535 I2C operations are protected by a FreeRTOS mutex using RAII pattern to prevent race conditions between:
+- The CustomHAL polling task (runs every 1ms)
+- Main application code
+
+### RAII Mutex Implementation
+
+The HAL uses the `MutexGuard` class from `freertos_util.h` which provides automatic lock/unlock via C++ RAII:
+
+```cpp
+// Automatic locking - mutex released when guard goes out of scope
+{
+    MutexGuard guard(i2cMutex);
+    // Critical section - I2C operations protected
+    Wire.beginTransmission(address);
+    Wire.write(data);
+    Wire.endTransmission();
+} // Mutex automatically released here
+```
+
+This approach ensures:
+- **No deadlocks**: Mutex always released even on early returns or exceptions
+- **No race conditions**: All I2C access properly serialized
+- **Clean code**: No manual lock/unlock pairs to maintain
+
+### Architecture Files
+
+- **CustomRadioLibHal.h**: RadioLib HAL adapter with virtual pin routing
+- **TCA9535_GPIO.h**: GPIO expander driver with mutex-protected I2C access
+- **freertos_util.h**: RAII utilities (MutexGuard, PinInterruptHandler)
+
+---
+
 ## Usage Example
 
 ### Basic Initialization
@@ -425,6 +459,36 @@ DIO1 interrupt not triggering on packet reception
 | **Direct GPIO** | <1μs | Fast, simple | Not possible on this hardware |
 | **Polling (1ms)** | 1-2ms | Works, acceptable | Slight CPU overhead |
 | **Hardware INT** | <100μs | Fast, low overhead | Requires finding INT pin |
+
+---
+
+## Known Limitations
+
+### Hardware Constraints
+
+- **TCA9535 Interrupt Latency**: Higher than native GPIO (requires I2C read to clear interrupt)
+  - Polling mode: 1-2ms latency (acceptable for LoRa timing requirements)
+  - Native GPIO: <1μs latency (not available on this hardware)
+
+- **I2C Bus Speed**: Maximum effective polling rate is 1kHz
+  - Limited by 400kHz I2C clock and transaction overhead
+  - Each GPIO read requires ~200μs I2C transaction
+  - Adequate for LoRa applications (typical packet times: 50-500ms)
+
+- **No PWM Support**: TCA9535 pins cannot generate PWM signals
+  - Only digital HIGH/LOW states supported
+  - Not an issue for LoRa radio control (only needs digital signals)
+
+### Software Dependencies
+
+- **RTClib Dependency**: The upstream example code (examples/simple_repeater/MyMesh.h) includes RTClib.h
+  - D1L hardware has no RTC chip, but library inclusion is harmless
+  - This is an upstream dependency outside D1L variant scope
+  - Can be addressed in future simple_repeater refactoring
+
+- **FreeRTOS Required**: Mutex protection requires FreeRTOS
+  - Already included in ESP32 Arduino framework
+  - No action needed - works out of the box
 
 ---
 
