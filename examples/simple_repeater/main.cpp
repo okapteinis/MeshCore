@@ -28,10 +28,16 @@ void halt() {
 static char command[160];
 
 void setup() {
-  // Initialize Serial with explicit UART0 pins for CH340 bridge
+  // Initialize Serial - handle both USB CDC and UART modes
+#if ARDUINO_USB_CDC_ON_BOOT
+  // USB CDC mode - Serial is HWCDC, no pin configuration needed
+  Serial.begin(115200);
+#else
+  // UART mode - Serial is HardwareSerial, configure pins for CH340 bridge
   Serial.end();
   delay(100);
   Serial.begin(115200, SERIAL_8N1, 44, 43);
+#endif
   delay(500);
 
   Serial.println("\n=== MeshCore D1L Repeater Boot ===");
