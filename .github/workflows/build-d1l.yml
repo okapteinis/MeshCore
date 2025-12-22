@@ -1,0 +1,65 @@
+name: Build D1L Variants
+
+on:
+  push:
+    branches:
+      - fix/d1l-comprehensive-fixes
+      - feature/d1l-official-repeater
+      - nightly
+    paths:
+      - 'variants/sensecap_indicator_d1l/**'
+      - 'examples/simple_repeater/**'
+      - 'src/**'
+      - 'platformio.ini'
+  pull_request:
+    branches: [ nightly ]
+
+jobs:
+  build-d1l:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        env:
+          - SenseCapIndicator-D1L_repeater
+          - SenseCapIndicator-D1L_companion
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Cache PlatformIO
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.platformio
+          .pio
+        key: ${{ runner.os }}-pio-${{ hashFiles('**/platformio.ini') }}
+        restore-keys: |
+          ${{ runner.os }}-pio-
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install PlatformIO
+      run: |
+        python -m pip install --upgrade pip
+        pip install platformio
+
+    - name: Build firmware
+      run: pio run -e ${{ matrix.env }}
+
+    - name: Check firmware size
+      run: |
+        pio run -e ${{ matrix.env }} --target size
+        echo "Checking flash usage..."
+        pio run -e ${{ matrix.env }} --target size | grep "Flash:" || true
+
+    - name: Upload firmware artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: firmware-${{ matrix.env }}
+        path: .pio/build/${{ matrix.env }}/firmware.bin
+        retention-days: 7
