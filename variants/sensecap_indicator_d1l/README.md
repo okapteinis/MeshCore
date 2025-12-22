@@ -328,7 +328,7 @@ This variant was developed based on:
    - File: `variants/esp32s3/seeed-sensecap-indicator/variant.h`
    - File: `variants/esp32s3/seeed-sensecap-indicator/platformio.ini`
 
-3. **Pin Research**: See `/PIN_RESEARCH.md` in repository root
+3. **Pin Research**: See [D1L Pin Research](../../docs/hardware/d1l_pin_research.md)
 
 ### Testing Status
 
