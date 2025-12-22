@@ -22,19 +22,28 @@ variants/*/local_*.cpp
 platformio_local.ini
 
 # Secrets and credentials
+secrets.h
+credentials.h
+local_config.h
 **/passwords.txt
 **/credentials.h
 **/secrets.ini
 
 # Build artifacts (ensure these are ignored)
+.pioenvs/
+.piolibdeps/
 *.bin
 *.elf
 *.hex
+*.uf2
 
 # IDE specific
 *.swp
 *.swo
 *~
+
+# OS files
+Thumbs.db
 
 # Python cache
 __pycache__/

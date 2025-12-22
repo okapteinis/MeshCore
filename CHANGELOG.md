@@ -63,11 +63,18 @@ This is the initial release of SenseCAP Indicator D1L support for MeshCore.
 
 **Testing Checklist:**
 - [x] Builds successfully on macOS
-- [ ] Builds successfully on Linux (CI will verify)
+- [x] Builds successfully on Linux (verified via CI)
 - [ ] Flashed to physical D1L hardware
-- [ ] BLE advertising visible
-- [ ] Can connect via MeshCore app
-- [ ] Radio transmits on 869.618 MHz
-- [ ] Can communicate with other NARROW mode nodes
-- [ ] Display shows correct status
-- [ ] Admin password changeable via CLI
+- [ ] Radio initialization completes
+- [ ] BLE advertising visible from phone
+- [ ] Can connect via MeshCore mobile app
+- [ ] Radio transmits on correct frequency (869.618 MHz)
+- [ ] Can communicate with other NARROW mode MeshCore nodes
+- [ ] Display shows status correctly
+- [ ] Touch interface responds
+- [ ] Admin password can be changed via CLI
+- [ ] Device name can be set via BLE app
+- [ ] Power consumption is acceptable
+- [ ] Standby mode works correctly
+
+**BLOCKING ISSUE:** D1L variant is non-functional due to IO Expander HAL requirement. See docs/hardware/d1l_pin_research.md for details.
