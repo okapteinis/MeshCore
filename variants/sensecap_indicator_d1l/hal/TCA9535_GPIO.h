@@ -47,8 +47,7 @@ private:
     TCA9555* ioExpander;     // Underlying driver (TCA9555 is compatible with TCA9535)
     uint8_t i2cAddress;      // I2C address of TCA9535
     bool initialized;        // Initialization state
-    SemaphoreHandle_t _mutex; // Mutex for thread-safe cache operations
-    bool mutexCreated;       // Tracks if mutex was successfully created
+    SemaphoreHandle_t* _sharedMutex; // Pointer to shared mutex from CustomRadioLibHal
 
     // Pin state cache to minimize I2C transactions
     // digitalWrite checks cache and skips I2C write if state unchanged
@@ -88,20 +87,17 @@ public:
      * Constructor
      *
      * @param addr I2C address of TCA9535 (default 0x20 for SenseCAP Indicator)
+     * @param sharedMutex Pointer to shared I2C mutex from CustomRadioLibHal (optional, set later via setSharedMutex)
      */
-    TCA9535_GPIO(uint8_t addr = 0x20)
-        : ioExpander(nullptr), i2cAddress(addr), initialized(false), mutexCreated(false) {
+    TCA9535_GPIO(uint8_t addr = 0x20, SemaphoreHandle_t* sharedMutex = nullptr)
+        : ioExpander(nullptr), i2cAddress(addr), initialized(false), _sharedMutex(sharedMutex) {
         outputCache = 0xFFFF;    // All high by default
         directionCache = 0xFFFF; // All inputs by default
 
-        // Create mutex for thread-safe cache operations
-        _mutex = xSemaphoreCreateMutex();
-        if (_mutex == NULL) {
-            Serial.println("[TCA9535] ERROR: Failed to create mutex");
-            Serial.println("[TCA9535] Thread-safety cannot be guaranteed!");
-            mutexCreated = false;
+        if (_sharedMutex != nullptr) {
+            Serial.println("[TCA9535] Using shared I2C mutex for thread-safety");
         } else {
-            mutexCreated = true;
+            Serial.println("[TCA9535] WARNING: No shared mutex provided - set via setSharedMutex() before use");
         }
     }
 
@@ -109,15 +105,27 @@ public:
      * Destructor
      *
      * Cleans up resources when object is destroyed.
+     * Note: Does NOT delete shared mutex (owned by CustomRadioLibHal)
      */
     ~TCA9535_GPIO() {
         if (ioExpander != nullptr) {
             delete ioExpander;
             ioExpander = nullptr;
         }
-        if (_mutex != NULL) {
-            vSemaphoreDelete(_mutex);
-            _mutex = NULL;
+        // _sharedMutex is NOT deleted - it's owned by CustomRadioLibHal
+    }
+
+    /**
+     * Set shared I2C mutex from CustomRadioLibHal
+     *
+     * Must be called before begin() if mutex wasn't provided in constructor.
+     *
+     * @param sharedMutex Pointer to the I2C mutex from CustomRadioLibHal
+     */
+    void setSharedMutex(SemaphoreHandle_t* sharedMutex) {
+        _sharedMutex = sharedMutex;
+        if (_sharedMutex != nullptr) {
+            Serial.println("[TCA9535] Shared I2C mutex configured");
         }
     }
 
@@ -137,10 +145,10 @@ public:
     bool begin(TwoWire* wire = &Wire) {
         Serial.printf("[TCA9535] Initializing at I2C address 0x%02X\n", i2cAddress);
 
-        // Check if mutex was successfully created
-        if (!mutexCreated) {
-            Serial.println("[TCA9535] FATAL: Mutex creation failed during construction");
-            Serial.println("[TCA9535] Cannot initialize - thread-safety required");
+        // Check if shared mutex is configured
+        if (_sharedMutex == nullptr) {
+            Serial.println("[TCA9535] FATAL: No shared mutex configured");
+            Serial.println("[TCA9535] Call setSharedMutex() before begin()");
             return false;
         }
 
@@ -151,8 +159,14 @@ public:
             return false;
         }
 
-        // Initialize the driver (sets pin modes)
-        if (!ioExpander->begin(INPUT)) {
+        // Initialize the driver (sets pin modes) - thread-safe I2C operation
+        bool initSuccess;
+        {
+            SemaphoreLockGuard lock(*_sharedMutex);
+            initSuccess = ioExpander->begin(INPUT);
+        }
+
+        if (!initSuccess) {
             Serial.printf("[TCA9535] ERROR: Device not found at address 0x%02X\n", i2cAddress);
             Serial.println("[TCA9535] Check I2C wiring: SDA=GPIO39, SCL=GPIO40");
             Serial.println("[TCA9535] Run I2C scanner to verify address");
@@ -219,8 +233,12 @@ public:
         uint8_t physPin = virtualToPhysical(pin);
         if (physPin == 0xFF) return;
 
-        // Set pin mode on TCA9535
-        ioExpander->pinMode1(physPin, mode);
+        // Thread-safe I2C operation
+        {
+            SemaphoreLockGuard lock(*_sharedMutex);
+            // Set pin mode on TCA9535
+            ioExpander->pinMode1(physPin, mode);
+        }
 
         // Update direction cache
         if (mode == OUTPUT) {
@@ -253,7 +271,7 @@ public:
         if (physPin == 0xFF) return;
 
         // RAII lock guard - automatically releases mutex on all exit paths
-        SemaphoreLockGuard lock(_mutex);
+        SemaphoreLockGuard lock(*_sharedMutex);
 
         // Check cache - skip I2C write if state unchanged
         uint16_t pinMask = (1 << physPin);
@@ -304,8 +322,13 @@ public:
         uint8_t physPin = virtualToPhysical(pin);
         if (physPin == 0xFF) return LOW;
 
-        // Read from TCA9535
-        uint8_t value = ioExpander->read1(physPin);
+        // Thread-safe I2C operation
+        uint8_t value;
+        {
+            SemaphoreLockGuard lock(*_sharedMutex);
+            // Read from TCA9535
+            value = ioExpander->read1(physPin);
+        }
 
         // Verbose logging only for debugging - uncomment if needed
         // Serial.printf("[TCA9535] Pin %d (phys %d) read = %s\n",

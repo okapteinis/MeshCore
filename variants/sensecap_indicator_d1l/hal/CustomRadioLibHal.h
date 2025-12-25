@@ -64,7 +64,11 @@ class CustomRadioLibHal : public ArduinoHal {
 private:
     TCA9535_GPIO* ioExpander;  // Pointer to TCA9535 GPIO wrapper
     bool initialized;          // Tracks if HAL is properly initialized
-    SemaphoreHandle_t i2cMutex; // Protects I2C operations for thread safety
+
+public:
+    SemaphoreHandle_t i2cMutex; // Protects I2C operations for thread safety (shared with TCA9535_GPIO)
+
+private:
 
     /**
      * Determine if pin number is virtual (managed by TCA9535)
@@ -114,11 +118,11 @@ private:
     static void pollTask(void* parameter) {
         CustomRadioLibHal* hal = static_cast<CustomRadioLibHal*>(parameter);
 
-        Serial.println("[CustomHAL] Polling task started (1ms interval)");
+        Serial.println("[CustomHAL] Polling task started (5ms interval)");
 
         while (true) {
             hal->pollVirtualInterruptsInternal();
-            vTaskDelay(pdMS_TO_TICKS(1)); // Poll every 1ms
+            vTaskDelay(pdMS_TO_TICKS(5)); // Poll every 5ms (reduced bus congestion)
         }
     }
 
@@ -134,8 +138,12 @@ private:
         for (int i = 0; i < MAX_VIRTUAL_INTERRUPTS; i++) {
             if (!virtualInterrupts[i].enabled) continue;
 
-            // Read current state from TCA9535
-            uint8_t currentState = ioExpander->digitalRead(virtualInterrupts[i].pin);
+            // Read current state from TCA9535 (thread-safe with mutex)
+            uint8_t currentState;
+            {
+                SemaphoreLockGuard lock(i2cMutex);
+                currentState = ioExpander->digitalRead(virtualInterrupts[i].pin);
+            }
             uint8_t lastState = virtualInterrupts[i].lastState;
 
             bool trigger = false;
@@ -184,6 +192,9 @@ public:
         i2cMutex = xSemaphoreCreateMutex();
         if (i2cMutex == NULL) {
             Serial.println("[CustomHAL] WARNING: Failed to create I2C mutex");
+        } else {
+            // Share the mutex with TCA9535_GPIO for synchronized I2C access
+            ioExpander->setSharedMutex(&i2cMutex);
         }
 
         Serial.println("[CustomHAL] Created");
@@ -235,7 +246,7 @@ public:
         if (result == pdPASS) {
             initialized = true;
             Serial.println("[CustomHAL] Initialized successfully");
-            Serial.println("[CustomHAL] Polling task started (priority 2, 1ms interval)");
+            Serial.println("[CustomHAL] Polling task started (priority 2, 5ms interval)");
         } else {
             initialized = false;
             Serial.println("[CustomHAL] FATAL ERROR: Failed to create polling task!");
