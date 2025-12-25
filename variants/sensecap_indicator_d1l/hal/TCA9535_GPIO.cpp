@@ -166,7 +166,7 @@ void TCA9535_GPIO::digitalWrite(uint16_t pin, uint8_t value) {
     {
         SemaphoreLockGuard lock(d1l_i2c_mutex);
         if (!lock.isLocked()) {
-            Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex in digitalWrite");
+            Serial.printf("[TCA9535] ERROR: Failed to acquire I2C mutex in digitalWrite (pin %u)\n", pin);
             return;
         }
         writeSuccess = ioExpander->write1(physPin, value);
@@ -204,7 +204,7 @@ uint8_t TCA9535_GPIO::digitalRead(uint16_t pin) {
     {
         SemaphoreLockGuard lock(d1l_i2c_mutex);
         if (!lock.isLocked()) {
-            Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex in digitalRead");
+            Serial.printf("[TCA9535] ERROR: Failed to acquire I2C mutex in digitalRead (pin %u)\n", pin);
             return LOW; // Safe default
         }
         value = ioExpander->read1(physPin);
