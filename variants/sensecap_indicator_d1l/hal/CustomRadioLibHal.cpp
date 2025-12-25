@@ -1,4 +1,5 @@
 #include "CustomRadioLibHal.h"
+#include "freertos_util.h"
 
 /**
  * Global I2C mutex shared between CustomRadioLibHal and TCA9535_GPIO
@@ -32,14 +33,16 @@ void CustomRadioLibHal::pollVirtualInterruptsInternal() {
     for (int i = 0; i < MAX_VIRTUAL_INTERRUPTS; i++) {
         if (!virtualInterrupts[i].enabled) continue;
 
-        // Read current state from TCA9535 with mutex protection
+        // Read current state from TCA9535 with RAII mutex protection
         uint8_t currentState;
-        if (xSemaphoreTake(d1l_i2c_mutex, portMAX_DELAY) == pdTRUE) {
+        {
+            SemaphoreLockGuard lock(d1l_i2c_mutex);
+            if (!lock.isLocked()) {
+                Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex in polling task");
+                continue; // Skip this interrupt check
+            }
             currentState = ioExpander->digitalRead(virtualInterrupts[i].pin);
-            xSemaphoreGive(d1l_i2c_mutex);
-        } else {
-            continue; // Failed to acquire mutex, skip this iteration
-        }
+        } // Mutex automatically released here
 
         uint8_t lastState = virtualInterrupts[i].lastState;
         bool trigger = false;
@@ -152,11 +155,9 @@ void CustomRadioLibHal::term() {
         Serial.println("[CustomHAL] Polling task stopped");
     }
 
-    if (d1l_i2c_mutex != NULL) {
-        vSemaphoreDelete(d1l_i2c_mutex);
-        d1l_i2c_mutex = NULL;
-        Serial.println("[CustomHAL] I2C mutex deleted");
-    }
+    // The global d1l_i2c_mutex is NOT deleted here because other
+    // components (TCA9535_GPIO) may still need it after radio termination.
+    // Mutex lifecycle is managed by constructor/destructor only.
 
     initialized = false;
     ArduinoHal::term();
