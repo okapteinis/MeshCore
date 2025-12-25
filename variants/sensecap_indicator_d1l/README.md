@@ -11,8 +11,8 @@ The admin password is used to:
 
 **Steps:**
 1. Edit `variants/sensecap_indicator_d1l/platformio.ini`
-2. Find the line: `-D ADMIN_PASSWORD='"PLACEHOLDER_CHANGE_BEFORE_FLASH"'`
-3. Change to: `-D ADMIN_PASSWORD='"YourSecurePasswordHere"'`
+2. Find the line: `-D ADMIN_PASSWORD=\"PLACEHOLDER_CHANGE_BEFORE_FLASH\"`
+3. Change to: `-D ADMIN_PASSWORD=\"YourSecurePasswordHere\"`
 4. Build and flash
 5. **DO NOT commit your password to git**
 
