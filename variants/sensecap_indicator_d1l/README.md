@@ -394,6 +394,34 @@ For issues and questions:
 
 ---
 
+## Post-Flashing Configuration
+
+After flashing the firmware, you must set the repeater password via the Serial Console.
+
+1. **Connect to the device via Serial Monitor:**
+
+   - **Mac/Linux:**
+     ```bash
+     pio device monitor --baud 115200 --port /dev/cu.usbserial-XXXXXXXX
+     ```
+     (Replace X with your actual device ID, found via `ls /dev/cu.*`)
+
+   - **Windows:**
+     Use Device Manager to find COM port, then:
+     ```bash
+     pio device monitor --baud 115200 --port COMx
+     ```
+
+2. **Once the boot log appears and settles, type:**
+   ```
+   password NEWPASSWORD
+   ```
+   (Replace `NEWPASSWORD` with your desired secure password)
+
+3. **The device will auto-save.** You can then configure other settings via the MeshCore Bluetooth App or Serial.
+
+---
+
 **Version**: 1.0.0-alpha
 **Last Updated**: 2025-12-17
 **Status**: Experimental - Requires Hardware Testing

@@ -1,5 +1,7 @@
 #include <Arduino.h>   // needed for PlatformIO
 #include <Mesh.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include "MyMesh.h"
 
@@ -25,6 +27,56 @@ void halt() {
   while (1) ;
 }
 
+/**
+ * Set ESP32 system time to firmware compilation time
+ *
+ * The D1L lacks a battery-backed RTC, so on every boot the system time
+ * defaults to epoch (1970). This function sets it to the firmware build
+ * time, which is a reasonable fallback until the user sets the correct time.
+ *
+ * This prevents issues where the firmware has logic that won't allow setting
+ * the clock backwards - if the device thinks it's in May 2024 (build date),
+ * users can't set it to the current date if that's later.
+ */
+void setTimeFromCompile() {
+  // Parse __DATE__ and __TIME__ macros
+  // __DATE__ format: "Dec 25 2025"
+  // __TIME__ format: "14:30:00"
+
+  const char* date_str = __DATE__;
+  const char* time_str = __TIME__;
+
+  struct tm compile_time = {0};
+
+  // Parse month
+  const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  for (int i = 0; i < 12; i++) {
+    if (strncmp(date_str, months[i], 3) == 0) {
+      compile_time.tm_mon = i;
+      break;
+    }
+  }
+
+  // Parse day and year
+  sscanf(date_str + 4, "%d %d", &compile_time.tm_mday, &compile_time.tm_year);
+  compile_time.tm_year -= 1900; // tm_year is years since 1900
+
+  // Parse time
+  sscanf(time_str, "%d:%d:%d", &compile_time.tm_hour, &compile_time.tm_min, &compile_time.tm_sec);
+
+  // Convert to epoch time
+  time_t epoch_time = mktime(&compile_time);
+
+  // Set system time
+  struct timeval tv = {0};
+  tv.tv_sec = epoch_time;
+  tv.tv_usec = 0;
+  settimeofday(&tv, NULL);
+
+  Serial.printf("System time set to compile time: %s %s\n", date_str, time_str);
+}
+
 static char command[160];
 
 void setup() {
@@ -39,6 +91,9 @@ void setup() {
   Serial.begin(115200, SERIAL_8N1, 44, 43);
 #endif
   delay(500);
+
+  // Set system time to compile time (D1L has no battery-backed RTC)
+  setTimeFromCompile();
 
   Serial.println("\n=== MeshCore D1L Repeater Boot ===");
   Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
