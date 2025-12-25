@@ -1,4 +1,5 @@
 #include "TCA9535_GPIO.h"
+#include "freertos_util.h"
 
 /**
  * External reference to global I2C mutex
@@ -44,16 +45,17 @@ bool TCA9535_GPIO::begin(TwoWire* wire) {
         return false;
     }
 
-    // Initialize the driver (sets pin modes) - thread-safe I2C operation
-    bool initSuccess;
-    if (xSemaphoreTake(d1l_i2c_mutex, portMAX_DELAY) == pdTRUE) {
+    // Initialize the driver (sets pin modes) - thread-safe I2C operation with RAII
+    bool initSuccess = false;
+    {
+        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        if (!lock.isLocked()) {
+            Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex in begin");
+            delete ioExpander;
+            ioExpander = nullptr;
+            return false;
+        }
         initSuccess = ioExpander->begin(INPUT);
-        xSemaphoreGive(d1l_i2c_mutex);
-    } else {
-        Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex for init");
-        delete ioExpander;
-        ioExpander = nullptr;
-        return false;
     }
 
     if (!initSuccess) {
@@ -118,13 +120,14 @@ void TCA9535_GPIO::pinMode(uint16_t pin, uint8_t mode) {
     uint8_t physPin = virtualToPhysical(pin);
     if (physPin == 0xFF) return;
 
-    // Thread-safe I2C operation
-    if (xSemaphoreTake(d1l_i2c_mutex, portMAX_DELAY) == pdTRUE) {
+    // Thread-safe I2C operation with RAII
+    {
+        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        if (!lock.isLocked()) {
+            Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex in pinMode");
+            return;
+        }
         ioExpander->pinMode1(physPin, mode);
-        xSemaphoreGive(d1l_i2c_mutex);
-    } else {
-        Serial.println("[TCA9535] ERROR: Failed to acquire mutex in pinMode");
-        return;
     }
 
     // Update direction cache
@@ -158,14 +161,15 @@ void TCA9535_GPIO::digitalWrite(uint16_t pin, uint8_t value) {
         return;
     }
 
-    // Thread-safe I2C operation
+    // Thread-safe I2C operation with RAII
     bool writeSuccess = false;
-    if (xSemaphoreTake(d1l_i2c_mutex, portMAX_DELAY) == pdTRUE) {
+    {
+        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        if (!lock.isLocked()) {
+            Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex in digitalWrite");
+            return;
+        }
         writeSuccess = ioExpander->write1(physPin, value);
-        xSemaphoreGive(d1l_i2c_mutex);
-    } else {
-        Serial.printf("[TCA9535] ERROR: Failed to acquire mutex in digitalWrite (pin %u)\n", pin);
-        return;
     }
 
     if (!writeSuccess) {
@@ -195,14 +199,15 @@ uint8_t TCA9535_GPIO::digitalRead(uint16_t pin) {
     uint8_t physPin = virtualToPhysical(pin);
     if (physPin == 0xFF) return LOW;
 
-    // Thread-safe I2C operation
+    // Thread-safe I2C operation with RAII
     uint8_t value = LOW;
-    if (xSemaphoreTake(d1l_i2c_mutex, portMAX_DELAY) == pdTRUE) {
+    {
+        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        if (!lock.isLocked()) {
+            Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex in digitalRead");
+            return LOW; // Safe default
+        }
         value = ioExpander->read1(physPin);
-        xSemaphoreGive(d1l_i2c_mutex);
-    } else {
-        Serial.printf("[TCA9535] ERROR: Failed to acquire mutex in digitalRead (pin %u)\n", pin);
-        return LOW;
     }
 
     // Verbose logging disabled for performance
