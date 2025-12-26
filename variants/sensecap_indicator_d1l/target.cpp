@@ -2,7 +2,7 @@
 #include "target.h"
 #include <SPIFFS.h>
 
-// Provide default LORA_TX_POWER for companion builds
+// Provide default LORA_TX_POWER for builds that don't define it
 #ifndef LORA_TX_POWER
 #define LORA_TX_POWER 20
 #endif
@@ -309,7 +309,7 @@ bool radio_init() {
   fallback_clock.begin();
   rtc_clock.begin(Wire);
 
-#ifdef WRAPPER_CLASS
+#if RADIO_DRIVER_AVAILABLE
   // Initialize HAL
 #ifdef USE_CUSTOM_RADIOLIB_HAL
   // Serial.println("\nInitializing TCA9535 HAL");  // REMOVED - causes crash
@@ -442,7 +442,7 @@ bool radio_init() {
 
   Serial.println("SX1262 initialized successfully");
   Serial.println("BOOT COMPLETE\n");
-#endif // WRAPPER_CLASS
+#endif // RADIO_DRIVER_AVAILABLE
   return true;
 }
 
