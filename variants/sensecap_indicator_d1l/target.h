@@ -24,9 +24,7 @@
 
 // Global objects
 extern ESP32Board board;
-#if RADIO_DRIVER_AVAILABLE
-extern WRAPPER_CLASS radio_driver;
-#endif
+extern CustomSX1262Wrapper radio_driver;
 extern ESP32RTCClock fallback_clock;
 extern AutoDiscoverRTCClock rtc_clock;
 extern EnvironmentSensorManager sensors;
