@@ -7,6 +7,15 @@
   #include <WiFi.h>
 #endif
 
+// Variant-specific hardware driver declarations
+// These are only available when compiled as an Arduino variant
+#ifdef ARDUINO
+  #include "target.h"
+  #define RADIO_DRIVER_AVAILABLE 1
+#else
+  #define RADIO_DRIVER_AVAILABLE 0
+#endif
+
 #ifndef AUTO_OFF_MILLIS
   #define AUTO_OFF_MILLIS     15000   // 15 seconds
 #endif
