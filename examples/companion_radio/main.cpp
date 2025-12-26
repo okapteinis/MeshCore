@@ -93,11 +93,13 @@ static uint32_t _atoi(const char* sp) {
 
 StdRNG fast_rng;
 SimpleMeshTables tables;
+#if RADIO_DRIVER_AVAILABLE
 MyMesh the_mesh(radio_driver, fast_rng, rtc_clock, tables, store
    #ifdef DISPLAY_CLASS
       , &ui_task
    #endif
 );
+#endif
 
 /* END GLOBAL OBJECTS */
 
