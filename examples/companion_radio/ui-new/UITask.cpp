@@ -1,7 +1,7 @@
 #include "UITask.h"
 #include <helpers/TxtDataHelpers.h>
 #include "../MyMesh.h"
-#include "target.h"
+// #include "target.h"
 #ifdef WIFI_SSID
   #include <WiFi.h>
 #endif
@@ -540,7 +540,7 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
   _auto_off = millis() + AUTO_OFF_MILLIS;
 
 #if defined(PIN_USER_BTN)
-  user_btn.begin();
+  // user_btn.begin();
 #endif
 #if defined(PIN_USER_BTN_ANA)
   analog_btn.begin();
@@ -689,14 +689,14 @@ void UITask::shutdown(bool restart){
     _board->reboot();
   } else {
     _display->turnOff();
-    radio_driver.powerOff();
+    // radio_driver.powerOff();
     _board->powerOff();
   }
 }
 
 bool UITask::isButtonPressed() const {
 #ifdef PIN_USER_BTN
-  return user_btn.isPressed();
+  // return user_btn.isPressed();
 #else
   return false;
 #endif
