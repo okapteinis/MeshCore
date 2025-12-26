@@ -320,33 +320,37 @@ bool radio_init() {
   // Serial.printf("I2C: SDA=%d, SCL=%d, Freq=%u Hz\n",
   //               PIN_BOARD_SDA, PIN_BOARD_SCL, TCA9535_I2C_FREQ);  // REMOVED
 
+  // STEP 1: Create TCA9535_GPIO object (just construct, don't call begin() yet)
   gpio_expander = new TCA9535_GPIO(TCA9535_I2C_ADDR);
+
+  // Initialize SPI (needed before HAL creation)
+  // Serial.println("\nInitializing SPI Bus");  // REMOVED
+  spi.begin(LORA_SCK, LORA_MISO, LORA_MOSI);
+  // Serial.printf("SPI: SCK=%d, MISO=%d, MOSI=%d\n", LORA_SCK, LORA_MISO, LORA_MOSI);  // REMOVED
+
+  // STEP 2: Create CustomRadioLibHal (this creates the global I2C mutex)
+  SPISettings spiSettings(2000000, MSBFIRST, SPI_MODE0);
+  custom_hal = new CustomRadioLibHal(gpio_expander, spi, spiSettings);
+  custom_hal->init();
+  // Serial.println("HAL initialized with SPI settings");  // REMOVED
+
+  // STEP 3: NOW initialize TCA9535 (mutex exists now!)
   {
     I2C_Lock lock;
     if (!lock.isLocked() || !gpio_expander->begin(&Wire)) {
       delete gpio_expander;
       gpio_expander = nullptr;
+      delete custom_hal;
+      custom_hal = nullptr;
       return fail_and_cleanup("TCA9535 init failed");
     }
   }
   // Serial.printf("TCA9535 at I2C 0x%02X\n", TCA9535_I2C_ADDR);  // REMOVED
   // Serial.println();  // REMOVED
+
 #else
   // Serial.println("WARNING: USE_CUSTOM_RADIOLIB_HAL not defined!");  // REMOVED
   // Serial.println("Radio will likely fail without HAL!\n");  // REMOVED
-#endif
-
-  // Initialize SPI
-  // Serial.println("\nInitializing SPI Bus");  // REMOVED
-  spi.begin(LORA_SCK, LORA_MISO, LORA_MOSI);
-  // Serial.printf("SPI: SCK=%d, MISO=%d, MOSI=%d\n", LORA_SCK, LORA_MISO, LORA_MOSI);  // REMOVED
-
-#ifdef USE_CUSTOM_RADIOLIB_HAL
-  // Create HAL with SPI settings
-  SPISettings spiSettings(2000000, MSBFIRST, SPI_MODE0);
-  custom_hal = new CustomRadioLibHal(gpio_expander, spi, spiSettings);
-  custom_hal->init();
-  // Serial.println("HAL initialized with SPI settings");  // REMOVED
 #endif
 
   // Initialize Radio
