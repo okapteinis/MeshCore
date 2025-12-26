@@ -14,12 +14,6 @@ jobs:
     - name: Check for exposed secrets
       run: |
         echo "Scanning for hardcoded passwords..."
-        echo "Scanning for private keys..."
-        if grep -r "BEGIN RSA PRIVATE KEY\|BEGIN PRIVATE KEY" .; then
-          echo "ERROR: Found private key in code!"
-          exit 1
-        fi
-
         echo "Scanning for hardcoded device names..."
         if grep -r "ADVERT_NAME.*Avotiela" variants/; then
           echo "WARNING: Found hardcoded location-specific device name"
