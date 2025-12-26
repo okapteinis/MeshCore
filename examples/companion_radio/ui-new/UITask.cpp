@@ -1,7 +1,7 @@
-#include "UITask.h"
-#include <helpers/TxtDataHelpers.h>
 #include "../MyMesh.h"
+#include <helpers/TxtDataHelpers.h>
 #include <helpers/ui/MomentaryButton.h>
+#include "UTask.h"
 // #include "target.h"
 #ifdef WIFI_SSID
   #include <WiFi.h>
@@ -264,7 +264,9 @@ public:
       sprintf(tmp, "TX: %ddBm", _node_prefs->tx_power_dbm);
       display.print(tmp);
       display.setCursor(0, 53);
+      #if RADIO_DRIVER_AVAILABLE
       sprintf(tmp, "Noise floor: %d", radio_driver.getNoiseFloor());
+      #endif
       display.print(tmp);
     } else if (_page == HomePage::BLUETOOTH) {
       display.setColor(DisplayDriver::GREEN);
@@ -737,6 +739,7 @@ void UITask::loop() {
   if (ev == BUTTON_EVENT_TRIPLE_CLICK) {
     c = handleTripleClick(KEY_SELECT);
   }
+  #if RADIO_DRIVER_AVAILABLE
 #elif defined(PIN_USER_BTN)
   int ev = user_btn.check();
   if (ev == BUTTON_EVENT_CLICK) {
@@ -764,6 +767,7 @@ void UITask::loop() {
     _analogue_pin_read_millis = millis();
   }
 #endif
+  #endif
 #if defined(BACKLIGHT_BTN)
   if (millis() > next_backlight_btn_check) {
     bool touch_state = digitalRead(PIN_BUTTON2);
