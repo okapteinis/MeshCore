@@ -9,6 +9,12 @@
 // See PIN_RESEARCH.md for details
 
 #define RADIOLIB_STATIC_ONLY 1
+
+// Provide default LORA_TX_POWER for builds that don't define it
+#ifndef LORA_TX_POWER
+#define LORA_TX_POWER 20
+#endif
+
 #include <RadioLib.h>
 #include <helpers/ESP32Board.h>
 #include <helpers/radiolib/RadioLibWrappers.h>
@@ -24,9 +30,7 @@
 
 // Global objects
 extern ESP32Board board;
-#if RADIO_DRIVER_AVAILABLE
-extern WRAPPER_CLASS radio_driver;
-#endif
+extern CustomSX1262Wrapper radio_driver;
 extern ESP32RTCClock fallback_clock;
 extern AutoDiscoverRTCClock rtc_clock;
 extern EnvironmentSensorManager sensors;
