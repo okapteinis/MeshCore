@@ -47,6 +47,7 @@ namespace Config {
 static const uint8_t JPEG_MAGIC_HEADER[] = {0xFF, 0xD8, 0xFF};
 static const size_t JPEG_MAGIC_HEADER_SIZE = sizeof(JPEG_MAGIC_HEADER);
 
+#if RADIO_DRIVER_AVAILABLE
 // Global Objects (converted to pointers for safe init)
 ESP32Board board;
 static SPIClass spi;
@@ -252,7 +253,6 @@ bool testMapAccess() {
 // Radio Functions
 // ============================================================================
 
-#if RADIO_DRIVER_AVAILABLE
 bool radio_init() {
   // Serial is already initialized in main.cpp before calling this function
   // No need to reinitialize here - it would break the UART0 pin mapping
