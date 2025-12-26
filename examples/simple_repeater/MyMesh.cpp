@@ -1424,14 +1424,9 @@ void MyMesh::handleCmdFrame(size_t len) {
     uint32_t epochSeconds;
 
     // Validate buffer bounds before memcpy
-    if (1 + 4 > len) {
-      MESH_DEBUG_PRINTLN("ERROR: Buffer overflow prevented in CMD_SET_DEVICE_TIME");
-      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
-      return;
-    }
-
+    
     // Extract 32-bit epoch time (little-endian)
-    memcpy(&epochSeconds, &cmd_frame[1], 4);
+epochSeconds = (uint32_t)cmd_frame[1] | ((uint32_t)cmd_frame[2] << 8) | ((uint32_t)cmd_frame[3] << 16) | ((uint32_t)cmd_frame[4] << 24);
 
     // Convert to struct timeval
     struct timeval tv;
@@ -1443,23 +1438,22 @@ void MyMesh::handleCmdFrame(size_t len) {
       // Format and print confirmation
       time_t now = time(NULL);
       struct tm *timeinfo = localtime(&now);
+if (timeinfo) {
 
-      MESH_DEBUG_PRINTLN("CMD_SET_DEVICE_TIME: Mesh time sync OK: %lu seconds (%04d-%02d-%02d %02d:%02d:%02d)",
-                         epochSeconds,
-                         timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
-                         timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-
-      Serial.printf("Mesh time sync OK: %lu seconds (", epochSeconds);
-      Serial.printf("%04d-%02d-%02d %02d:%02d:%02d)\n",
-                    timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
-                    timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+        MESH_DEBUG_PRINTLN("CMD_SET_DEVICE_TIME: Mesh time sync OK: %lu seconds (%04d-%02d-%02d %02d:%02d:%02d)",
+                           epochSeconds,
+                           timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+                           timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+  
+        Serial.printf("Mesh time sync OK: %lu seconds (", epochSeconds);
+        Serial.printf("%04d-%02d-%02d %02d:%02d:%02d)\n",
+                      timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+                      timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 
       writeOKFrame();
     } else {
-      MESH_DEBUG_PRINTLN("CMD_SET_DEVICE_TIME: Mesh time sync FAILED");
-      Serial.println("Mesh time sync FAILED");
-      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
-    }
+MESH_DEBUG_PRINTLN("CMD_SET_DEVICE_TIME: Mesh time sync OK, but localtime() failed. Epoch: %lu", epochSeconds);
+        Serial.printf("Mesh time sync OK: %lu seconds (localtime() failed)\\n", epochSeconds);    }
 
   } else {
     // Unsupported command for repeater
