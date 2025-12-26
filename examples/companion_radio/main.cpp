@@ -107,6 +107,7 @@ void halt() {
   while (1) ;
 }
 
+#if RADIO_DRIVER_AVAILABLE
 void setup() {
   Serial.begin(115200);
 
@@ -233,3 +234,4 @@ void loop() {
 #endif
   rtc_clock.tick();
 }
+#endif

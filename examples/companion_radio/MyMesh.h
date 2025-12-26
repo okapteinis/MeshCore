@@ -84,6 +84,7 @@ struct AdvertPath {
   uint8_t path[MAX_PATH_SIZE];
 };
 
+#if RADIO_DRIVER_AVAILABLE
 class MyMesh : public BaseChatMesh, public DataStoreHost {
 public:
   MyMesh(mesh::Radio &radio, mesh::RNG &rng, mesh::RTCClock &rtc, SimpleMeshTables &tables, DataStore& store, AbstractUITask* ui=NULL);
@@ -225,5 +226,6 @@ private:
   #define ADVERT_PATH_TABLE_SIZE   16
   AdvertPath advert_paths[ADVERT_PATH_TABLE_SIZE]; // circular table
 };
+#endif
 
 extern MyMesh the_mesh;
