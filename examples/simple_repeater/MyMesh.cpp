@@ -1,5 +1,7 @@
 #include "MyMesh.h"
 #include <algorithm>
+#include <time.h>
+#include <sys/time.h>
 #include "ProtocolCodes.h"
 
 /* ------------------------------ Config -------------------------------- */
@@ -1415,6 +1417,48 @@ void MyMesh::handleCmdFrame(size_t len) {
     } else {
       writeErrFrame(ERR_CODE_ILLEGAL_ARG);
       MESH_DEBUG_PRINTLN("CMD_SET_ADVERT_LATLON: Invalid coordinates lat=%d, lon=%d", lat, lon);
+    }
+
+  } else if (cmd_frame[0] == CMD_SET_DEVICE_TIME && len >= 5) {
+    // App/Companion wants to set device time
+    uint32_t epochSeconds;
+
+    // Validate buffer bounds before memcpy
+    if (1 + 4 > len) {
+      MESH_DEBUG_PRINTLN("ERROR: Buffer overflow prevented in CMD_SET_DEVICE_TIME");
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
+      return;
+    }
+
+    // Extract 32-bit epoch time (little-endian)
+    memcpy(&epochSeconds, &cmd_frame[1], 4);
+
+    // Convert to struct timeval
+    struct timeval tv;
+    tv.tv_sec = epochSeconds;
+    tv.tv_usec = 0;
+
+    // Set system time
+    if (settimeofday(&tv, NULL) == 0) {
+      // Format and print confirmation
+      time_t now = time(NULL);
+      struct tm *timeinfo = localtime(&now);
+
+      MESH_DEBUG_PRINTLN("CMD_SET_DEVICE_TIME: Mesh time sync OK: %lu seconds (%04d-%02d-%02d %02d:%02d:%02d)",
+                         epochSeconds,
+                         timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+                         timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+
+      Serial.printf("Mesh time sync OK: %lu seconds (", epochSeconds);
+      Serial.printf("%04d-%02d-%02d %02d:%02d:%02d)\n",
+                    timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+                    timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+
+      writeOKFrame();
+    } else {
+      MESH_DEBUG_PRINTLN("CMD_SET_DEVICE_TIME: Mesh time sync FAILED");
+      Serial.println("Mesh time sync FAILED");
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
     }
 
   } else {

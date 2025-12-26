@@ -6,6 +6,7 @@
 // BLE Protocol Command Codes
 #define CMD_APP_START              1
 #define CMD_GET_CONTACTS           4
+#define CMD_SET_DEVICE_TIME        6
 #define CMD_SET_ADVERT_NAME        8
 #define CMD_SYNC_NEXT_MESSAGE     10
 #define CMD_SET_RADIO_PARAMS      11

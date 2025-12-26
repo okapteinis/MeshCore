@@ -2,7 +2,6 @@
 #include <Mesh.h>
 #include <time.h>
 #include <sys/time.h>
-#include <WiFi.h>
 
 #include "MyMesh.h"
 
@@ -29,107 +28,50 @@ void halt() {
 }
 
 /**
- * Synchronize system time via WiFi NTP
+ * Set ESP32 system time to firmware compilation time (fallback)
  *
  * The D1L lacks a battery-backed RTC, so on every boot the system time
- * defaults to epoch (1970). This function connects to WiFi, fetches accurate
- * time from an NTP server, and then disconnects to free resources.
- *
- * WiFi credentials are configured via build flags in platformio.ini.
- * Timezone is set for Riga, Latvia (EET: UTC+2 winter, UTC+3 summer DST).
+ * defaults to epoch (1970). This sets it to the firmware build time as a
+ * reasonable fallback until time is synced via mesh (CMD_SET_DEVICE_TIME).
  */
-void syncTimeViaNTP() {
-  Serial.println("\n=== NTP Time Synchronization ===");
-  Serial.flush();
+void setTimeFromCompile() {
+  // Parse __DATE__ and __TIME__ macros
+  // __DATE__ format: "Dec 25 2025"
+  // __TIME__ format: "14:30:00"
 
-  // Check if WiFi credentials are configured
-  #ifndef WIFI_SSID
-    Serial.println("ERROR: WIFI_SSID not defined in platformio.ini");
-    Serial.println("Skipping NTP sync - time will remain at epoch");
-    Serial.flush();
-    return;
-  #endif
+  const char* date_str = __DATE__;
+  const char* time_str = __TIME__;
 
-  const char* ssid = WIFI_SSID;
-  const char* password = WIFI_PASSWORD;
-  const char* ntpServer = NTP_SERVER;
-  const long gmtOffset_sec = GMT_OFFSET_SEC;
-  const int daylightOffset_sec = DAYLIGHT_OFFSET_SEC;
+  struct tm compile_time = {0};
 
-  // Connect to WiFi
-  Serial.print("Connecting to WiFi: ");
-  Serial.print(ssid);
-  Serial.print("... ");
-  Serial.flush();
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-
-  // Wait for connection with 10 second timeout
-  unsigned long startAttemptTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
-    delay(500);
-    Serial.print(".");
-    Serial.flush();
+  // Parse month
+  const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  for (int i = 0; i < 12; i++) {
+    if (strncmp(date_str, months[i], 3) == 0) {
+      compile_time.tm_mon = i;
+      break;
+    }
   }
 
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println(" FAILED");
-    Serial.println("ERROR: Could not connect to WiFi");
-    Serial.println("Continuing without time sync - timestamps will be incorrect!");
-    Serial.flush();
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_OFF);
-    return;
-  }
+  // Parse day and year
+  sscanf(date_str + 4, "%d %d", &compile_time.tm_mday, &compile_time.tm_year);
+  compile_time.tm_year -= 1900; // tm_year is years since 1900
 
-  Serial.println(" CONNECTED");
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
-  Serial.flush();
+  // Parse time
+  sscanf(time_str, "%d:%d:%d", &compile_time.tm_hour, &compile_time.tm_min, &compile_time.tm_sec);
 
-  // Configure time with NTP server and timezone
-  Serial.print("Fetching time from NTP server: ");
-  Serial.print(ntpServer);
-  Serial.print("... ");
-  Serial.flush();
+  // Convert to epoch time
+  time_t epoch_time = mktime(&compile_time);
 
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  // Set system time
+  struct timeval tv = {0};
+  tv.tv_sec = epoch_time;
+  tv.tv_usec = 0;
+  settimeofday(&tv, NULL);
 
-  // Wait for time to be set (tm_year > 70 means year > 1970)
-  struct tm timeinfo;
-  int retry = 0;
-  while (!getLocalTime(&timeinfo) && retry < 10) {
-    delay(500);
-    retry++;
-    Serial.print(".");
-    Serial.flush();
-  }
-
-  if (timeinfo.tm_year <= 70) {
-    Serial.println(" FAILED");
-    Serial.println("ERROR: Could not fetch time from NTP server");
-    Serial.println("Continuing without time sync - timestamps will be incorrect!");
-    Serial.flush();
-  } else {
-    Serial.println(" SUCCESS");
-    Serial.print("Current time: ");
-    Serial.print(&timeinfo, "%A, %B %d %Y %H:%M:%S");
-    Serial.println();
-    Serial.print("Timezone: EET (UTC+2/+3 with DST)");
-    Serial.println();
-    Serial.flush();
-  }
-
-  // Disconnect WiFi to free resources and reduce interference
-  Serial.println("Disconnecting WiFi...");
-  Serial.flush();
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_OFF);
-  delay(100);
-
-  Serial.println("=== NTP Sync Complete ===\n");
-  Serial.flush();
+  Serial.printf("System time set to compile time: %s %s\n", date_str, time_str);
+  Serial.println("Waiting for mesh time sync from companion...");
 }
 
 static char command[160];
@@ -139,10 +81,12 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  // Synchronize system time via WiFi NTP
-  syncTimeViaNTP();
+  Serial.println("\n=== MeshCore D1L Repeater Boot ===");
 
-  Serial.println("=== MeshCore D1L Repeater Boot ===");
+  // Set system time to compile time (fallback until mesh sync)
+  setTimeFromCompile();
+
+  Serial.println();
   Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
   Serial.printf("CPU: %u MHz\n", ESP.getCpuFreqMHz());
   Serial.flush();
