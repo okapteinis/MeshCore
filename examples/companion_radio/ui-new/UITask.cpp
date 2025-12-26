@@ -248,7 +248,7 @@ public:
         display.print(tmp);
       }
     } else if (_page == HomePage::RADIO) {
-      #if RADIO_DRIVER_AVAILABLE
+#if RADIO_DRIVER_AVAILABLE
       display.setColor(DisplayDriver::YELLOW);
       display.setTextSize(1);
       // freq / sf
@@ -268,7 +268,7 @@ public:
       
       sprintf(tmp, "Noise floor: %d", radio_driver.getNoiseFloor());
       display.print(tmp);
-      #endif
+#endif
     } else if (_page == HomePage::BLUETOOTH) {
       display.setColor(DisplayDriver::GREEN);
       display.drawXbm((display.width() - 32) / 2, 18,
