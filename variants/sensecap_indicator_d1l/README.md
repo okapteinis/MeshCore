@@ -1,5 +1,25 @@
 # SenseCAP Indicator D1L - MeshCore Variant
 
+## Security Notice
+
+**IMPORTANT:** Before building and flashing this firmware, you MUST change the ADMIN_PASSWORD in platformio.ini from the placeholder value to your own secure password.
+
+The admin password is used to:
+- Access repeater configuration via MeshCore app
+- Change radio parameters remotely
+- Update GPS coordinates
+
+**Steps:**
+1. Edit `variants/sensecap_indicator_d1l/platformio.ini`
+2. Find the line: `-D ADMIN_PASSWORD='"PLACEHOLDER_CHANGE_BEFORE_FLASH"'`
+3. Change to: `-D ADMIN_PASSWORD='"YourSecurePasswordHere"'`
+4. Build and flash
+5. **DO NOT commit your password to git**
+
+**Note:** The syntax uses single quotes around double quotes `'"value"'` which is required for PlatformIO string macros with spaces.
+
+---
+
 ## ✅ **IMPLEMENTATION COMPLETE - READY FOR HARDWARE TESTING** ✅
 
 **CUSTOM HAL IMPLEMENTED - FULL LORA SUPPORT**
@@ -62,9 +82,9 @@ pio run -e SenseCapIndicator-D1L_repeater
 ## Configuration
 
 ### Runtime Configuration (Recommended)
-1. Flash firmware to device
+1. Flash firmware to device (after setting ADMIN_PASSWORD - see Security Notice above)
 2. Connect via BLE using MeshCore app
-3. Set admin password (default: 123456)
+3. Log in with your custom admin password
 4. Configure device name and other settings through the app
 
 ### Build-time Configuration (Advanced)
@@ -328,7 +348,7 @@ This variant was developed based on:
    - File: `variants/esp32s3/seeed-sensecap-indicator/variant.h`
    - File: `variants/esp32s3/seeed-sensecap-indicator/platformio.ini`
 
-3. **Pin Research**: See `/PIN_RESEARCH.md` in repository root
+3. **Pin Research**: See [D1L Pin Research](../../docs/hardware/d1l_pin_research.md)
 
 ### Testing Status
 
@@ -371,6 +391,34 @@ This variant follows the MeshCore project license.
 For issues and questions:
 - GitHub Issues: https://github.com/okapteinis/MeshCore/issues
 - Community: apraide.lv
+
+---
+
+## Post-Flashing Configuration
+
+After flashing the firmware, you must set the repeater password via the Serial Console.
+
+1. **Connect to the device via Serial Monitor:**
+
+   - **Mac/Linux:**
+     ```bash
+     pio device monitor --baud 115200 --port /dev/cu.usbserial-XXXXXXXX
+     ```
+     (Replace X with your actual device ID, found via `ls /dev/cu.*`)
+
+   - **Windows:**
+     Use Device Manager to find COM port, then:
+     ```bash
+     pio device monitor --baud 115200 --port COMx
+     ```
+
+2. **Once the boot log appears and settles, type:**
+   ```
+   password NEWPASSWORD
+   ```
+   (Replace `NEWPASSWORD` with your desired secure password)
+
+3. **The device will auto-save.** You can then configure other settings via the MeshCore Bluetooth App or Serial.
 
 ---
 

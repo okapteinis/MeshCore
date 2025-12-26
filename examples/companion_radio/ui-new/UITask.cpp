@@ -1,9 +1,19 @@
-#include "UITask.h"
+#include "UTask.h"
 #include <helpers/TxtDataHelpers.h>
 #include "../MyMesh.h"
-#include "target.h"
+#include <helpers/ui/MomentaryButton.h>
+// #include "target.h"
 #ifdef WIFI_SSID
   #include <WiFi.h>
+#endif
+
+// Variant-specific hardware driver declarations
+// These are only available when compiled as an Arduino variant
+#ifdef ARDUINO
+  #include "target.h"
+  #define RADIO_DRIVER_AVAILABLE 1
+#else
+  #define RADIO_DRIVER_AVAILABLE 0
 #endif
 
 #ifndef AUTO_OFF_MILLIS
@@ -238,6 +248,7 @@ public:
         display.print(tmp);
       }
     } else if (_page == HomePage::RADIO) {
+#if RADIO_DRIVER_AVAILABLE
       display.setColor(DisplayDriver::YELLOW);
       display.setTextSize(1);
       // freq / sf
@@ -254,8 +265,10 @@ public:
       sprintf(tmp, "TX: %ddBm", _node_prefs->tx_power_dbm);
       display.print(tmp);
       display.setCursor(0, 53);
+      
       sprintf(tmp, "Noise floor: %d", radio_driver.getNoiseFloor());
       display.print(tmp);
+#endif
     } else if (_page == HomePage::BLUETOOTH) {
       display.setColor(DisplayDriver::GREEN);
       display.drawXbm((display.width() - 32) / 2, 18,
@@ -540,7 +553,7 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
   _auto_off = millis() + AUTO_OFF_MILLIS;
 
 #if defined(PIN_USER_BTN)
-  user_btn.begin();
+  // user_btn.begin();
 #endif
 #if defined(PIN_USER_BTN_ANA)
   analog_btn.begin();
@@ -689,14 +702,14 @@ void UITask::shutdown(bool restart){
     _board->reboot();
   } else {
     _display->turnOff();
-    radio_driver.powerOff();
+    // radio_driver.powerOff();
     _board->powerOff();
   }
 }
 
 bool UITask::isButtonPressed() const {
 #ifdef PIN_USER_BTN
-  return user_btn.isPressed();
+  // return user_btn.isPressed();
 #else
   return false;
 #endif
@@ -727,6 +740,7 @@ void UITask::loop() {
   if (ev == BUTTON_EVENT_TRIPLE_CLICK) {
     c = handleTripleClick(KEY_SELECT);
   }
+  
 #elif defined(PIN_USER_BTN)
   int ev = user_btn.check();
   if (ev == BUTTON_EVENT_CLICK) {
