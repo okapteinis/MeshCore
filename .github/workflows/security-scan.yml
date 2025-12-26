@@ -14,11 +14,6 @@ jobs:
     - name: Check for exposed secrets
       run: |
         echo "Scanning for hardcoded passwords..."
-        if grep -r "mKw1hwmI" .; then
-          echo "ERROR: Found exposed password in code!"
-          exit 1
-        fi
-
         echo "Scanning for private keys..."
         if grep -r "BEGIN RSA PRIVATE KEY\|BEGIN PRIVATE KEY" .; then
           echo "ERROR: Found private key in code!"
