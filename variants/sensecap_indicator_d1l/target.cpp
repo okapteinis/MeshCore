@@ -63,8 +63,10 @@ static Module* radio_module = nullptr;
 
 // Create a dummy radio wrapper that will be properly initialized in radio_init
 // This is needed because radio_driver is declared as extern in target.h (not a pointer)
+#if RADIO_DRIVER_AVAILABLE
 static CustomSX1262 dummy_radio(new Module(0, 0, 0, 0, spi));
 CustomSX1262Wrapper radio_driver(dummy_radio, board);
+#endif
 
 // I2C Bus Mutex
 static SemaphoreHandle_t i2c_bus_mutex = nullptr;
