@@ -1,12 +1,6 @@
 #include <Arduino.h>
 #include "target.h"
 #include <SPIFFS.h>
-
-// Provide default LORA_TX_POWER for builds that don't define it
-#ifndef LORA_TX_POWER
-#define LORA_TX_POWER 20
-#endif
-
 #include <helpers/radiolib/CustomSX1262.h>
 
 // HAL Implementation Includes
