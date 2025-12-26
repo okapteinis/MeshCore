@@ -252,6 +252,7 @@ bool testMapAccess() {
 // Radio Functions
 // ============================================================================
 
+#if RADIO_DRIVER_AVAILABLE
 bool radio_init() {
   // Serial is already initialized in main.cpp before calling this function
   // No need to reinitialize here - it would break the UART0 pin mapping
@@ -504,3 +505,4 @@ mesh::LocalIdentity radio_new_identity() {
   RadioNoiseListener rng(*radio);
   return mesh::LocalIdentity(&rng);
 }
+#endif
