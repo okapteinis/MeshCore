@@ -39,21 +39,40 @@ uint8_t Packet::writeTo(uint8_t dest[]) const {
 }
 
 bool Packet::readFrom(const uint8_t src[], uint8_t len) {
+  if (len < 1) return false;  // Minimum packet size (at least header)
+
   uint8_t i = 0;
   header = src[i++];
+
+  // Validate transport codes fit in buffer before reading
   if (hasTransportCodes()) {
+    if (i + 4 > len) return false;  // Need 4 bytes for transport codes
     memcpy(&transport_codes[0], &src[i], 2); i += 2;
     memcpy(&transport_codes[1], &src[i], 2); i += 2;
   } else {
     transport_codes[0] = transport_codes[1] = 0;
   }
+
+  // Validate path_len field is readable
+  if (i >= len) return false;
   path_len = src[i++];
+
+  // Validate path length is within bounds
   if (path_len > sizeof(path)) return false;   // bad encoding
+
+  // Validate path data fits in buffer
+  if (i + path_len > len) return false;  // Not enough data for path
   memcpy(path, &src[i], path_len); i += path_len;
-  if (i >= len) return false;   // bad encoding
+
+  // Validate we haven't exceeded buffer
+  if (i > len) return false;   // bad encoding
+
+  // Calculate and validate payload length
   payload_len = len - i;
   if (payload_len > sizeof(payload)) return false;  // bad encoding
-  memcpy(payload, &src[i], payload_len); //i += payload_len;
+
+  // Read payload
+  memcpy(payload, &src[i], payload_len);
   return true;   // success
 }
 

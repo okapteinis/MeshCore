@@ -1440,18 +1440,26 @@ void MyMesh::handleCmdFrame(size_t len) {
     // App/Companion wants to set device time
     uint32_t epochSeconds;
 
-    // Validate buffer bounds before memcpy
-    
     // Extract 32-bit epoch time (little-endian)
-        epochSeconds = (uint32_t)cmd_frame[1] | ((uint32_t)cmd_frame[2] << 8) | ((uint32_t)cmd_frame[3] << 16) | ((uint32_t)cmd_frame[4] << 24);
+    epochSeconds = (uint32_t)cmd_frame[1] | ((uint32_t)cmd_frame[2] << 8) |
+                   ((uint32_t)cmd_frame[3] << 16) | ((uint32_t)cmd_frame[4] << 24);
 
-    // Convert to struct timeval
-    struct timeval tv;
-    tv.tv_sec = epochSeconds;
-    tv.tv_usec = 0;
+    // Validate timestamp is reasonable (prevents time manipulation attacks)
+    const uint32_t MIN_VALID_TIME = 946684800;   // Jan 1, 2000 00:00:00 UTC
+    const uint32_t MAX_VALID_TIME = 2147483647;  // Jan 19, 2038 03:14:07 UTC (Unix epoch limit)
 
-    // Set system time
-    if (settimeofday(&tv, NULL) == 0) {
+    if (epochSeconds < MIN_VALID_TIME || epochSeconds > MAX_VALID_TIME) {
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
+      MESH_DEBUG_PRINTLN("CMD_SET_DEVICE_TIME: Invalid timestamp %u (valid range: %u-%u)",
+                         epochSeconds, MIN_VALID_TIME, MAX_VALID_TIME);
+    } else {
+      // Convert to struct timeval
+      struct timeval tv;
+      tv.tv_sec = epochSeconds;
+      tv.tv_usec = 0;
+
+      // Set system time
+      if (settimeofday(&tv, NULL) == 0) {
       // Format and print confirmation
       time_t now = time(NULL);
       struct tm *timeinfo = localtime(&now);
