@@ -233,14 +233,10 @@ uint16_t TCA9535_GPIO::readAllInputs() {
             return 0x0000; // Safe default (all LOW)
         }
 
-        // Read all 16 pins individually (TCA9555 library doesn't have bulk read)
-        // Bit 0 = pin 0, Bit 15 = pin 15
-        for (int pin = 0; pin < 16; pin++) {
-            uint8_t pinState = ioExpander->read1(pin);
-            if (pinState == HIGH) {
-                allInputs |= (1 << pin);
-            }
-        }
+        // Use read16() to read both ports in 2 I2C transactions (instead of 16)
+        // read16() internally calls read8(port 0) and read8(port 1)
+        // Returns: [P1_7..P1_0 | P0_7..P0_0] where bit 0 = P0_0, bit 15 = P1_7
+        allInputs = ioExpander->read16();
     }
 
     // Verbose logging disabled for performance

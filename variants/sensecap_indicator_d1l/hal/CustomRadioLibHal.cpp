@@ -81,32 +81,25 @@ void intHandlerTask(void* parameter) {
         // ulTaskNotifyTake clears notification count and returns notifications received
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        // Read TCA9535 input registers (this auto-clears the INT pin)
-        uint16_t inputState;
-        {
-            SemaphoreLockGuard lock(d1l_i2c_mutex);
-            if (!lock.isLocked()) {
-                Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex in INT handler");
-                continue;
-            }
-            inputState = hal->ioExpander->readAllInputs();
-        }
-
-        // Process all registered virtual interrupts with snapshot
-        hal->processVirtualInterrupts(inputState);
-
-        // Check if INT is still LOW (multiple pin changes during processing)
-        if (digitalRead(TCA9535_INT_PIN) == LOW) {
-            Serial.println("[CustomHAL] INT still LOW after processing - re-triggering");
-            // Re-read inputs to catch additional changes
+        // Level-triggered INT handling: loop while INT pin is LOW
+        // This ensures we don't miss interrupts when multiple pins change
+        // or when the expander's interrupt condition persists
+        do {
+            // Read TCA9535 input registers (this auto-clears the INT pin if all changes are read)
+            uint16_t inputState;
             {
                 SemaphoreLockGuard lock(d1l_i2c_mutex);
-                if (lock.isLocked()) {
-                    inputState = hal->ioExpander->readAllInputs();
-                    hal->processVirtualInterrupts(inputState);
+                if (!lock.isLocked()) {
+                    Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex in INT handler");
+                    break; // Exit do/while, return to waiting for next notification
                 }
+                inputState = hal->ioExpander->readAllInputs();
             }
-        }
+
+            // Process all registered virtual interrupts with snapshot
+            hal->processVirtualInterrupts(inputState);
+
+        } while (digitalRead(TCA9535_INT_PIN) == LOW);
     }
 }
 
