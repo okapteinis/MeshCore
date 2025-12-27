@@ -22,7 +22,6 @@ jobs:
       matrix:
         env:
           - SenseCapIndicator-D1L_repeater
-          - SenseCapIndicator-D1L_companion
 
     steps:
     - name: Checkout code

@@ -61,15 +61,7 @@ This variant adds support for the **Seeed Studio SenseCAP Indicator D1L** to Mes
 - **Sensors**: RP2040 sensor coprocessor (temperature, humidity, CO2)
 - **Connectivity**: Wi-Fi, Bluetooth, LoRa
 
-## Firmware Variants
-
-### Companion (SenseCapIndicator-D1L_companion)
-For use with MeshCore mobile apps via BLE or WiFi.
-
-Build command:
-```bash
-pio run -e SenseCapIndicator-D1L_companion
-```
+## Firmware Variant
 
 ### Repeater (SenseCapIndicator-D1L_repeater)
 Standalone repeater for extending network coverage.
@@ -249,13 +241,9 @@ cd MeshCore
 # Checkout nightly branch
 git checkout nightly
 
-# Build companion radio firmware
-pio run -e SenseCapIndicator-D1L_comp_radio_usb
+# Build repeater firmware
+pio run -e SenseCapIndicator-D1L_repeater
 ```
-
-### Build Environments
-
-- **SenseCapIndicator-D1L_comp_radio_usb**: Companion radio mode with USB serial communication
 
 ## Flashing Instructions
 
@@ -266,7 +254,7 @@ pio run -e SenseCapIndicator-D1L_comp_radio_usb
 3. Flash the firmware:
 
 ```bash
-pio run -e SenseCapIndicator-D1L_comp_radio_usb -t upload
+pio run -e SenseCapIndicator-D1L_repeater -t upload
 ```
 
 ### Via Web Flasher
@@ -275,21 +263,7 @@ After initial flash, the device supports OTA updates (if OTA is enabled).
 
 ## Usage
 
-### Companion Radio Mode
-
-The default environment (`SenseCapIndicator-D1L_comp_radio_usb`) provides a companion radio that connects to MeshCore-compatible applications via USB serial.
-
-**Features:**
-- 350 contact capacity
-- 40 group channels
-- Touch screen UI
-- Real-time mesh status display
-- Message encryption
-
-### Serial Communication
-
-- **Baud Rate**: 115200
-- **Protocol**: MeshCore companion radio protocol
+The D1L repeater extends mesh network coverage by receiving and forwarding packets. Configure the device via BLE using the MeshCore app.
 
 ## Known Limitations
 
