@@ -1,356 +1,624 @@
-# MeshCore Project Context for Claude Code
+# CLAUDE.md - MeshCore AI Assistant Context Guide
 
-## Project Identity
-MeshCore is a lightweight, portable C++ library for embedded systems that enables multi-hop packet routing using LoRa and other packet radios. It is designed for developers building resilient, decentralized communication networks that work without internet infrastructure.
+This document provides comprehensive context for AI assistants, collaborators, and developers working on MeshCore. Refer to this guide when planning contributions, understanding architecture, or implementing new features.
 
-## Core Purpose
-- Enable wireless mesh networks for off-grid communication
-- Balance simplicity with scalability for custom embedded solutions
-- Provide lower-level control than Meshtastic while being more accessible than Reticulum
-- Support battery-powered, solar-powered devices with low power consumption
+---
 
-## Repository Structure
+## 1. Project Identity & Purpose
 
-### Core Source Code (src/)
-- Mesh.cpp / Mesh.h - Core mesh networking logic, routing algorithms, packet forwarding
-- Dispatcher.cpp / Dispatcher.h - Message dispatching and event handling
-- Packet.cpp / Packet.h - Packet structure definitions and serialization
-- Identity.cpp / Identity.h - Node identity management and addressing
-- Utils.cpp / Utils.h - Utility functions for the library
-- helpers/ - Additional helper modules
+**MeshCore** is a lightweight, portable C++ library for embedded systems that enables **multi-hop packet routing** using LoRa radios and other packet-based wireless technologies.
 
-### Hardware Variants (variants/)
-Each subdirectory contains device-specific configurations:
-- target.h - Pin definitions and hardware configuration
-- target.cpp - Hardware initialization code
-- platformio.ini - Build configuration for specific device
-- Display drivers when applicable
+### Core Vision
+- Create **resilient, decentralized communication networks** that operate without internet infrastructure
+- Support off-grid scenarios: emergency response, disaster recovery, tactical operations, remote sensor networks
+- Balance simplicity with scalability—providing lower-level control than Meshtastic while being more accessible than Reticulum
 
-Current variants include various ESP32-based LoRa devices, with active development on SenseCAP Indicator D1L support.
+### Key Differentiators
+- **Lightweight**: Designed for constrained embedded systems (ESP32, nRF52, RP2040)
+- **Portable**: Support for multiple platforms with clear HAL abstractions
+- **No Central Authority**: Fully decentralized mesh routing
+- **Battery-Friendly**: Low-power consumption via intermittent polling and efficient packet forwarding
 
-### Example Applications (examples/)
-- companion_radio - For use with external chat apps over BLE, USB, or WiFi
-- simple_repeater - Extends network coverage by relaying messages
-- simple_room_server - Simple BBS server for shared posts
-- simple_secure_chat - Secure terminal-based text communication
+### Target Use Cases
+- Emergency communication when infrastructure fails
+- Remote IoT sensor networks requiring multi-hop relay
+- Outdoor/tactical scenarios (hiking, military, security)
+- Off-grid community networks
+- BLE/USB companion apps with wireless mesh backends
 
-### Documentation (docs/)
-- faq.md - Comprehensive FAQ covering usage, hardware, troubleshooting
-- packet_structure.md - Protocol specification for packet format
-- payloads.md - Payload type definitions and structures
-- stats_binary_frames.md - Statistics frame format documentation
-- hardware/ - Hardware-specific documentation
+---
+
+## 2. Repository Structure
+
+```
+MeshCore/
+├── src/                      # Core mesh library (platform-agnostic)
+│   ├── MeshCore.h            # Main public API
+│   ├── Mesh.h/.cpp           # Mesh routing logic
+│   ├── Dispatcher.h/.cpp     # Packet reception dispatcher
+│   ├── Packet.h/.cpp         # Packet structure and serialization
+│   ├── Identity.h/.cpp       # Node identity and cryptographic keys
+│   ├── Utils.h/.cpp          # Utility functions
+│   └── helpers/              # Platform-specific helpers
+│       ├── ui/               # Display drivers (ST7735, E290, etc.)
+│       ├── bridges/          # Bridge implementations (WiFi, BLE, etc.)
+│       ├── radiolib/         # RadioLib helper classes
+│       └── ESP32Board.h      # ESP32-specific utilities
+│
+├── variants/                 # Device-specific implementations (65+ supported boards)
+│   ├── sensecap_indicator_d1l/   # SenseCAP Indicator D1L with custom HAL
+│   ├── heltec_v3/            # Heltec LoRa v3
+│   ├── ebyte_eora_s3/        # Ebyte EoRa S3
+│   └── ... (many more)
+│
+├── examples/                 # Reference applications
+│   ├── companion_radio/      # Phone app companion (350 contacts, 40 channels)
+│   ├── simple_repeater/      # Standalone packet forwarding
+│   ├── simple_room_server/   # Message server with ACL support
+│   ├── simple_secure_chat/   # Terminal-based encrypted chat
+│   └── simple_sensor/        # Remote sensor node template
+│
+├── docs/                     # Technical documentation
+│   ├── packet_structure.md   # Wire format specification
+│   ├── payloads.md           # Payload type definitions
+│   ├── stats_binary_frames.md # Statistics protocol
+│   ├── faq.md                # Frequently asked questions
+│   └── hardware/             # Hardware implementation guides
+│
+├── boards/                   # PlatformIO board definitions
+├── lib/                      # Third-party libraries (minimal)
+├── arch/                     # Architecture-specific code (ESP32, nRF52, etc.)
+├── .clang-format             # Code formatting rules
+├── platformio.ini            # PlatformIO project configuration
+├── library.json              # Arduino library metadata
+└── license.txt               # MIT License
+```
+
+### Key Directories to Understand
+
+- **src/** - Never modify core source arbitrarily; changes affect all variants
+- **variants/sensecap_indicator_d1l/** - Active development area; contains custom HAL for IO expander
+- **examples/** - Start here to understand how MeshCore is used
+- **docs/packet_structure.md** - Essential reading for protocol understanding
+- **.clang-format** - Specifies formatting for NEW code (do NOT retroactively reformat)
+
+---
+
+## 3. Critical Coding Standards (STRICT)
+
+### Memory Management - CRITICAL
+**RULE**: No dynamic memory allocation (`new`, `malloc`, `delete`, `free`) except during `setup()` and `begin()` initialization functions.
+
+**Rationale**: Embedded systems have limited heap; malloc fragmentation causes crashes after days/weeks of operation. Use fixed-size buffers and stack allocation instead.
+
+**Examples**:
+```cpp
+// WRONG - Dynamic allocation in runtime code
+void onPacket() {
+  uint8_t* buffer = new uint8_t[256];  // NEVER do this in handlers
+  // ...
+  delete buffer;
+}
+
+// CORRECT - Static/stack allocation
+void onPacket() {
+  uint8_t buffer[256];  // Stack allocation (if size is small)
+  // or use pre-allocated member variable
+}
+
+// CORRECT - Dynamic allocation only in setup
+void begin() {
+  _buffer = new uint8_t[4096];  // Okay during initialization
+}
+```
+
+### Code Style - DO NOT REFORMAT
+1. Follow the existing brace/indentation style in the file you're editing
+2. `.clang-format` exists for NEW files and NEW code only
+3. **DO NOT retroactively reformat existing code** - this creates unnecessary diffs that obscure real changes
+4. Indentation: 2 spaces (not tabs)
+5. Column limit: 110 characters
+6. Brace style: Attach (K&R style)
+
+**Example of correct style**:
+```cpp
+class MyClass {
+  int value;
+
+public:
+  MyClass() : value(0) {}
+
+  void process() {
+    if (value > 0) {
+      // code here
+    } else {
+      // other code
+    }
+  }
+};
+```
+
+### Embedded Systems Thinking
+- Think about memory constraints: ESP32 has ~520KB free RAM after OS overhead
+- Avoid string concatenation in runtime paths
+- Use const references to avoid copies
+- Cache results if computing expensive operations repeatedly
+- Profile before optimizing; measure memory usage
+
+### Other Standards
+- Use meaningful variable names (avoid single letters except loop counters)
+- Keep functions focused and small (< 50 lines preferred)
+- Use Arduino style (`pinMode()`, `digitalWrite()`) for platform compatibility
+- Use `#pragma once` for header guards (not `#ifndef`)
+- Comment WHY, not WHAT (code shows what; comments explain reasoning)
+
+---
+
+## 4. Current Development Focus (Nightly Branch)
+
+The **nightly** branch is the active development branch. PR base should be **dev** (not main).
+
+### SenseCAP Indicator D1L (PRIMARY FOCUS)
+
+**Status**: Implementation underway for companion radio and repeater support
+
+**Key Features**:
+- 480x480 capacitive touch TFT display
+- ESP32-S3 dual-core MCU
+- 8MB Flash + 8MB OPI PSRAM
+- Semtech SX1262 LoRa radio
+- TCA9535 IO expander for radio control pins
+- Optional RP2040 sensor coprocessor
+
+**Completed Work**:
+1. ✅ Custom HAL Implementation
+   - `hal/TCA9535_GPIO.h` - GPIO wrapper for IO expander
+   - `hal/CustomRadioLibHal.h` - Full RadioLib GODMODE HAL
+   - FreeRTOS polling task for interrupt handling (1ms latency)
+   - Virtual pin routing: 100-199 maps to TCA9535, 0-99 maps to ESP32 GPIO
+
+2. ✅ EU NARROW Mode Migration
+   - Frequency: 869.618 MHz
+   - Bandwidth: 62.5 kHz
+   - Spreading Factor: 8
+   - Coding Rate: 8/5
+   - Ready for apraide.lv network integration
+
+3. ✅ Security Improvements
+   - Removed hardcoded credentials
+   - Runtime configuration via Serial CLI
+   - Persistent SPIFFS storage for settings
+   - Parameter validation for all radio operations
+
+4. ✅ Hardware Fixes (15 critical/high/medium priority)
+   - I2C bus mutex (FreeRTOS RAII wrapper)
+   - PSRAM runtime detection with fallback
+   - Serial initialization guard
+   - Buffer overflow fixes
+   - Global static initialization order fixes
+   - 5-second timeout on radio.begin()
+   - Printf format string vulnerabilities closed
+
+**In Progress**:
+- Hardware testing on physical devices
+- Sensor integration (RP2040 coprocessor)
+- OTA update support
+
+**Known Limitations**:
+- Untested on hardware (development constraints)
+- RP2040 sensor readings not yet implemented
+- GPS support not implemented
+- Touch screen uses polling mode (not interrupt mode)
+
+**Build Commands**:
+```bash
+# Companion radio with USB
+pio run -e SenseCapIndicator-D1L_comp_radio_usb -t upload
+
+# Repeater mode
+pio run -e SenseCapIndicator-D1L_repeater -t upload
+```
+
+### Supporting Hardware (Secondary)
+- Heltec v3/v4 boards (mature)
+- Ebyte EoRa S3 (mature)
+- RAK Wireless boards (various stages)
+- Generic E22 LoRa modules (basic support)
+
+---
+
+## 5. Protocol & Network Architecture
+
+### Packet Structure (Wire Format)
+
+**Maximum Packet Size**: 255 bytes (including header)
+
+```
+Packet Layout:
+[Header(1)] [TransportCodes(4-opt)] [PathLen(1)] [Path(0-64)] [Payload(0-184)]
+```
+
+**Header Format** (8 bits):
+- Bits 0-1: Route Type (2 bits)
+- Bits 2-5: Payload Type (4 bits)
+- Bits 6-7: Payload Version (2 bits)
+
+### Route Types
+- `ROUTE_TYPE_TRANSPORT_FLOOD` (0x00): Flood routing + transport codes for zoning/filtering
+- `ROUTE_TYPE_FLOOD` (0x01): Flood with dynamic path building
+- `ROUTE_TYPE_DIRECT` (0x02): Direct route (path provided)
+- `ROUTE_TYPE_TRANSPORT_DIRECT` (0x03): Direct route + transport codes
+
+### Payload Types
+- `PAYLOAD_TYPE_REQ` (0x00): Request with dest/src hashes and MAC
+- `PAYLOAD_TYPE_RESPONSE` (0x01): Response to request
+- `PAYLOAD_TYPE_TXT_MSG` (0x02): Plain text message
+- `PAYLOAD_TYPE_ACK` (0x03): Simple acknowledgment
+- `PAYLOAD_TYPE_ADVERT` (0x04): Node advertisement (identity)
+- `PAYLOAD_TYPE_GRP_TXT` (0x05): Group text (unencrypted)
+- `PAYLOAD_TYPE_GRP_DATA` (0x06): Group datagram
+- `PAYLOAD_TYPE_ANON_REQ` (0x07): Anonymous request
+- `PAYLOAD_TYPE_MULTIPART` (0x0A): Multi-packet message
+- `PAYLOAD_TYPE_CONTROL` (0x0B): Control/discovery packets
+- `PAYLOAD_TYPE_RAW_CUSTOM` (0x0F): Raw application-defined data
+
+### Routing Architecture
+
+1. **Flood Mode**: Packets propagate across all nodes, building up the path as they hop
+2. **Direct Mode**: Sender provides the path; no flooding needed
+3. **Repeater Role**: Companion nodes DON'T retransmit (to prevent routing loops)
+4. **Transport Codes**: Optional zoning/filtering mechanism for large networks
+
+**Hop Limiting**:
+- Configurable maximum hops
+- Prevents infinite loops
+- Default: ~15 hops (configurable per build)
+
+### Identity & Encryption
+
+**Node Identity**:
+- 32-byte public key (ECDH/Curve25519)
+- 32-byte private key (kept secure on device)
+- Node hash: First byte of SHA256(public_key)
+- Unique identity enables peer-to-peer messaging
+
+**Encryption**:
+- AES-256-CTR for payload encryption
+- ECDH key agreement for peer-specific secrets
+- HMAC for message authentication
+- Ephemeral keys support for anonymous requests
+
+---
+
+## 6. Dependencies
+
+### Core Dependencies (library.json)
+
+| Library | Version | Purpose |
+|---------|---------|---------|
+| **RadioLib** | ^7.3.0 | LoRa/SX1262 radio control (CRITICAL) |
+| **Crypto** (rweather) | ^0.4.0 | AES-256, ECDH encryption |
+| **RTClib** (Adafruit) | ^2.1.3 | Real-time clock/timestamp |
+| **Melopero RV3028** | ^1.1.0 | RTC device driver |
+| **CayenneLPP** | 1.6.1 | Sensor data encoding |
+
+### Framework-Specific
+- **Arduino Framework** (PlatformIO): Standard for ESP32/nRF52/RP2040
+- **FreeRTOS**: Multitasking (ESP32)
+- **SPIFFS**: File storage for config (ESP32)
+
+### Variant-Specific (SenseCAP D1L)
+- **LovyanGFX**: Display driver (TFT/touchscreen support)
+- Custom TCA9535 IO expander driver (included)
+- Custom RadioLib HAL for GPIO expander routing
 
 ### Build System
-- platformio.ini - Main PlatformIO configuration
-- build.sh - Build script
-- boards/ - Custom board definitions
-- arch/ - Architecture-specific code
+- **PlatformIO Core** (command line) or **PlatformIO IDE** (VS Code)
+- Python 3.x for build scripts
+- Git for version control
 
-## Critical Coding Standards
+---
 
-### Memory Management Rules (STRICT)
-- NO dynamic memory allocation (new, malloc, calloc) except during setup/begin functions
-- All buffers must be statically allocated or stack-allocated
-- Think embedded systems - memory is constrained
-- Avoid C++ features that use hidden dynamic allocation (std::vector, std::string in loops)
+## 7. Known Issues & Limitations
 
-### Code Style Rules (STRICT)
-- Follow existing brace and indentation style in core source modules
-- A .clang-format file exists - use it for NEW code only
-- DO NOT reformat existing code retroactively - this creates unnecessary diffs that make finding bugs harder
-- Keep code concise without unnecessary abstraction layers
-- Don't think like a high-level language programmer - think embedded
+### SenseCAP Indicator D1L
+1. **Untested on Hardware**: Variant implemented but not yet validated on physical device
+2. **Sensor Integration Incomplete**: RP2040 coprocessor communication not yet implemented
+3. **Touch Screen Polling**: Uses I2C polling instead of interrupt (inherited design)
+4. **OTA Updates**: Not enabled by default (can be enabled with build flags)
+5. **IO Expander Latency**: I2C-based GPIO access slower than direct GPIO (acceptable for LoRa timing)
 
-### Code Organization
-- Use consistent naming conventions matching existing code
-- Keep header files clean with forward declarations where possible
-- Minimize dependencies between modules
-- Document hardware-specific behavior in comments
+### Network Protocol
+1. **Path Hashing (V2)**: Path verification not yet implemented (V2 spec in discussion)
+2. **Multipart Handling**: Large messages still experimental
+3. **Compression**: LZW compression planned but not implemented
+4. **Dynamic Coding Rate**: No automatic adjustment based on link quality (V2 roadmap)
 
-## Current Development Focus (Nightly Branch)
+### Platform Limits
+1. **Companion Radio**: Max 350 contacts, 40 groups (firmware design limit)
+2. **Max Hops**: ~15 hops default (tunable but increases latency)
+3. **Payload Size**: Max 184 bytes of actual payload (255 total - headers)
+4. **Storage**: SPIFFS file system limited (32MB on ESP32)
 
-### SenseCAP Indicator D1L Support
-This is the primary active development area on the nightly branch:
+### Stability
+1. **Long-running Devices**: Occasionally need reboot after weeks (investigate heap fragmentation)
+2. **High Traffic**: May exceed heap under extreme loads (40+ msg/sec)
+3. **WiFi Bridge**: OTA updates can interrupt mesh (switch to LTE/4G in future)
 
-#### What's Been Done
-- Pin configuration research completed (documented in docs/hardware/d1l_pin_research.md)
-- Variant structure created in variants/sensecap_indicator_d1l/
-- CHANGELOG.md tracks all D1L-specific changes
-- Security improvements: removed hardcoded credentials, added scanning workflow
-- Migration from EU WIDE mode to EU NARROW mode (869.618 MHz, BW=62.5 kHz, SF=8)
+---
 
-#### Critical Outstanding Issue - IO Expander Architecture
-The D1L uses a TCA9535 IO Expander for SX1262 radio control pins instead of direct GPIO. This means:
-- Control pins (CS, RST, BUSY, DIO1) are accessed via I2C at address 0x40
-- Standard RadioLib expects direct GPIO pin numbers
-- The variant uses pattern (pin | IO_EXPANDER) but this creates invalid GPIO numbers
-- Current implementation is NON-FUNCTIONAL without custom HAL
+## 8. Testing Requirements & Contributing Workflow
 
-#### Three Potential Solutions
-Option A (Recommended): Use Meshtastic's custom Arduino-ESP32 framework fork that includes TCA9535 HAL support
-Option B: Implement custom RadioLib HAL using RADIOLIB_GODMODE to intercept GPIO operations
-Option C: Direct implementation with manual TCA9535 initialization and wrapper functions
+### Before Submitting a PR
 
-#### D1L Pin Configuration (for reference)
-SPI Bus (direct GPIO):
-- LORA_MOSI: 48
-- LORA_MISO: 47
-- LORA_SCK: 41
+1. **Code Quality Checks**
+   - No new dynamic allocations in runtime paths
+   - Follow existing code style (no retroactive reformatting)
+   - Compile without warnings (`-Wall -Wextra` enabled)
+   - All included headers are used
 
-Control pins (via IO Expander at 0x40):
-- LORA_CS: 0 | IO_EXPANDER
-- LORA_RST: 1 | IO_EXPANDER
-- LORA_BUSY: 2 | IO_EXPANDER
-- LORA_DIO1: 3 | IO_EXPANDER
+2. **Functional Testing**
+   - For **core library changes**: Test on at least 2 different boards
+   - For **variant-specific changes**: Test on target board if available
+   - For **UI changes**: Verify display output and touch responsiveness
+   - For **radio changes**: Transmit/receive test with other nodes
 
-IO Expander:
-- I2C Address: 0x40
-- IRQ Pin: GPIO 42
-- I2C SDA: GPIO 39
-- I2C SCL: GPIO 40
+3. **Memory Testing** (if adding features)
+   - Use PlatformIO's memory profiler: `pio run --verbose`
+   - Ensure heap usage is stable over time (no fragmentation)
+   - Check stack depth of any new tasks
 
-Display (ILI9341):
-- Managed by LovyanGFX with IO expander support
+4. **Documentation**
+   - Update relevant .md files in `/docs/`
+   - Add comments to public APIs
+   - Update BUGFIXES.md or README for user-facing changes
 
-## Protocol and Network Architecture
+### Pull Request Workflow
 
-### Packet Structure
-Packets have a specific binary format documented in docs/packet_structure.md:
-- Header with routing information
-- Source and destination addresses
-- Hop count and TTL
-- Payload with type identification
-- CRC for integrity
+1. **Branch**: Create feature branch from `dev` (not `main`)
+2. **Small PRs**: Aim for <500 lines changed per PR
+3. **Clear Commit Messages**:
+   - First line: brief summary (< 60 chars)
+   - Blank line
+   - Detailed explanation (wrap at 80 chars)
+4. **Reference Issues**: Link to GitHub issues in description
+5. **Base Branch**: Always use `dev` as base, NOT `main`
 
-### Routing Behavior
-- Multi-hop forwarding with configurable hop limits
-- "Companion" nodes do not repeat messages (prevents adverse routing)
-- Repeater nodes forward packets to extend range
-- Self-healing network topology
+### Example PR Description
+```
+## Summary
+Add memory-efficient message queuing for high-traffic repeaters
 
-### Radio Configuration (Current)
-- EU NARROW mode: 869.618 MHz, BW=62.5 kHz, SF=8, CR=8
-- Previous EU WIDE mode (869.525 MHz, BW=250, SF=11) deprecated
-- TCXO voltage: 2.4V for SX1262
-- DIO2 as RF switch enabled
+## Changes
+- Implemented ring buffer (no dynamic allocation)
+- Reduced memory footprint by 40%
+- Maintains order for multipart messages
 
-## Dependencies and Libraries
+## Testing
+- Tested on Heltec v3 and Ebyte EoRa S3
+- Forwarded 10K packets without memory growth
+- Verified no message loss up to 50 msg/sec
 
-### Key External Libraries
-- RadioLib ^7.3.0 - LoRa radio control with RADIOLIB_GODMODE=1 enabled
-- LovyanGFX - Display driver with IO expander support
-- RTClib - Real-time clock (currently required by simple_repeater but D1L has no RTC)
+## Checklist
+- [x] No dynamic allocation in runtime
+- [x] Code follows project style
+- [x] Compiled without warnings
+- [x] Tested on 2+ boards
+```
 
-### Platform
-- PlatformIO on Espressif32 platform (version 6.11.0)
-- ESP32-S3 for D1L variant
-- Arduino framework
+### Contribution Philosophy
 
-## Known Issues and Limitations
+From README:
+> **Keep it simple.** Think embedded, not high-level programming. Keep code concise without unnecessary layers. Favor clarity and correctness over cleverness.
 
-### D1L Variant Specific
-- Non-functional without HAL implementation for IO expander
-- RTClib dependency is harmless but unnecessary (D1L has no RTC chip)
-- Testing checklist incomplete in CHANGELOG.md
+---
 
-### General
-- No dynamic memory allocation constraint can complicate some algorithms
-- LoRa timing sensitive to I2C overhead when using IO expander
-- Interrupt handling through IO expander adds complexity
+## 9. Important Files to Reference (Task-Specific)
 
-## Testing Requirements
+### Understanding the Architecture
+- **Start Here**: `src/MeshCore.h` - Public API entry point
+- **Packet Handling**: `src/Dispatcher.h` → `src/Mesh.h` (inheritance chain)
+- **Protocol**: `docs/packet_structure.md`, `docs/payloads.md`
+- **Example Usage**: `examples/simple_repeater/simple_repeater.cpp`
 
-### Before Committing D1L Changes
-- Must compile successfully on macOS and Linux
-- CI workflow validates build
-- Security scanning for credential leaks
-- Physical hardware testing required for functionality verification
+### Radio Configuration
+- **RadioLib Integration**: `src/helpers/radiolib/` directory
+- **Default Settings**: `platformio.ini` (build flags `LORA_FREQ`, `LORA_BW`, `LORA_SF`)
+- **Custom HAL**: `variants/sensecap_indicator_d1l/hal/CustomRadioLibHal.h` (reference implementation)
 
-### Testing Checklist for D1L
-- Builds successfully
-- Flashes to physical D1L hardware
-- BLE advertising visible
-- Can connect via MeshCore app
-- Radio transmits on 869.618 MHz
-- Can communicate with other NARROW mode nodes
-- Display shows correct status
-- Admin password changeable via CLI
+### Display & UI
+- **Display Drivers**: `src/helpers/ui/` (ST7735, ST7789, SH1106, E290, etc.)
+- **SenseCAP Display**: `variants/sensecap_indicator_d1l/hal/SCIndicatorDisplay.h`
+- **Button Handling**: `src/helpers/ui/MomentaryButton.h`
 
-## Contributing Workflow
+### Identity & Encryption
+- **Node Setup**: `src/Identity.h/.cpp` (key generation, storage)
+- **Crypto Library**: Uses rweather/Crypto (AES, ECDH, HMAC)
+- **Key Persistence**: Check variant's SPIFFS integration
 
-### Branch Strategy
-- Submit ALL pull requests to 'dev' branch (NOT master)
-- 'nightly' branch for active D1L development
-- Never commit directly to master
+### Security
+- **Removed Features**: Hardcoded credentials were removed (see BUGFIXES.md)
+- **Config Storage**: SPIFFS (ESP32) - see variants for implementation
+- **Serial CLI**: Example in SenseCAP repeater variant
 
-### Before Major Changes
-- Open an Issue first for discussion
-- Reach consensus on approach
-- Consider impact on structure and architecture
-- Discuss with community on Discord if architectural
+### Memory Management
+- **ESP32 Heap**: Check `esp_get_free_heap()` in debug builds
+- **Stack Depth**: Use FreeRTOS `uxTaskGetStackHighWaterMark()`
+- **Buffers**: Defined as macros in `src/MeshCore.h` (`MAX_PACKET_PAYLOAD`, `MAX_PATH_SIZE`)
 
-### For Minor Changes
-- Submit PR directly to dev branch
-- Provide clear description of changes
-- Ensure code follows existing style
-- Test on hardware if possible
+### Testing & Debugging
+- **Serial Output**: 115200 baud (configured in platformio.ini)
+- **Debug Builds**: Add `build_type = debug` to platformio.ini section
+- **Radio Debugging**: RadioLib has debug output (disabled by default)
 
-### PR Requirements
-- Clear commit messages
-- No reformatting of existing code
-- Follows memory management rules
-- Includes documentation updates if needed
-- Passes CI workflows
+---
 
-## Road-Map Status
+## 10. Security Considerations & Communication Channels
 
-### Completed
-- Companion radio UI redesign
-- Repeater + Room Server ACL support
-- Bridge mode standardization
-- Enhanced zero-hop neighbor discovery
+### Security Implementation
 
-### In Progress
-- D1L hardware support (blocked on IO expander HAL)
+**Strengths**:
+- End-to-end encryption with AES-256-CTR
+- ECDH key agreement prevents MITM attacks
+- HMAC prevents tampering
+- No plaintext node identifiers (hashed)
 
-### Planned
-- Repeater/Bridge transport codes for zoning/filtering
-- Round-trip manual path support
-- Multiple sub-meshes support
-- LZW message compression
-- Dynamic coding rate for weak vs strong hops
-- Multiple virtual nodes framework
-- V2 protocol specification
+**Weaknesses & Mitigations**:
+- No centralized PKI (distributed trust - appropriate for P2P)
+- Flooding topology reveals network topology (acceptable for tactical use)
+- DoS possible with spam messages (implement rate limiting if needed)
+- No perfect forward secrecy (acceptable for non-real-time systems)
 
-## Important Files to Reference
+**Removed Insecurities** (see BUGFIXES.md):
+- ❌ Hardcoded WiFi credentials (removed)
+- ❌ Unencrypted serial protocol (secured in variants)
+- ❌ Fixed default encryption keys (now per-node)
+- ❌ Printf format string vulnerabilities (fixed)
 
-### When Working on Core Networking
-- src/Mesh.cpp - Routing logic
-- src/Dispatcher.cpp - Message handling
-- docs/packet_structure.md - Protocol spec
+### Security for Contributors
 
-### When Adding Hardware Support
-- variants/*/target.h - Pin configuration patterns
-- variants/*/platformio.ini - Build settings patterns
-- docs/hardware/d1l_pin_research.md - D1L hardware analysis example
+**Public Communication**:
+- GitHub Issues: Bug reports, feature requests (public)
+- GitHub Discussions: Architecture questions (public)
+- Discord: Real-time community chat (invitation-only, ask in issues)
 
-### When Modifying Examples
-- examples/companion_radio - Reference for BLE/WiFi/USB implementation
-- examples/simple_repeater - Reference for repeater logic
+**Private Security Issues**:
+- Do NOT post security vulnerabilities in public issues
+- Contact maintainer (Scott Powell) via email or Discord DM
+- Allow 30 days for patch before public disclosure
 
-### When Updating Documentation
-- CHANGELOG.md - Maintain Keep a Changelog format
-- docs/faq.md - User-facing documentation
-- README.md - High-level project overview
+### Operational Security (Users)
 
-## Security Considerations
+1. **Network Privacy**: Assume local traffic may be observed (use encryption for sensitive data)
+2. **Key Management**: Keep private keys safe; loss of key = loss of identity
+3. **Firmware Integrity**: Verify signatures before flashing (feature planned)
+4. **Access Control**: Repeaters and Room Servers support ACL (implement if needed)
 
-### Recent Security Improvements
-- Default admin password now documented standard (123456)
-- CI workflow scans for credential leaks
-- Removed hardcoded credentials from build files
-- Added .gitignore patterns for secrets
+### Dependencies Security
 
-### When Adding Features
-- Never hardcode passwords or API keys
-- Use environment variables or runtime configuration
-- Document default values clearly
-- Scan code for credential leaks before commit
+- **RadioLib**: Regularly updated, maintained by jgromes
+- **Crypto Library**: Audited implementation (rweather)
+- **LovyanGFX**: Community-maintained, no critical issues
+- **Review Dependencies**: Check advisories before major releases
 
-## Communication Channels
+---
 
-### Getting Help
-- GitHub Issues for bugs and feature requests
-- Discord server: https://discord.gg/BMwCtwHj5V
-- Developer site: https://buymeacoffee.com/ripplebiz
+## 11. Roadmap & Future Directions
+
+### Near-term (Nightly Branch)
+- [ ] Hardware testing on SenseCAP D1L
+- [ ] Sensor integration (RP2040 coprocessor)
+- [ ] Stability testing (long-running operation)
+- [ ] Performance optimization (high-traffic scenarios)
+
+### Mid-term (V1.x)
+- [ ] V2 Protocol spec (path hashes, improved encryption)
+- [ ] Dynamic Coding Rate (adapt to signal quality)
+- [ ] LZW message compression
+- [ ] Multiple virtual nodes per device
+- [ ] Bridge mode standardization
+
+### Long-term (V2.x)
+- [ ] Sub-mesh support (off-grid client repeat mode)
+- [ ] Cross-band bridges (LoRa ↔ WiFi/cellular)
+- [ ] Advanced path finding algorithms
+- [ ] Hardware security module integration
+- [ ] Firmware signature verification
+
+---
+
+## 12. Getting Help & Reporting Issues
+
+### Resources
+
+1. **Documentation**: `/docs/` directory - FAQ, protocol, hardware guides
+2. **Examples**: `/examples/` - Reference implementations for your use case
+3. **Variant READMEs**: `/variants/*/README.md` - Board-specific info
 
 ### Reporting Issues
-- Use GitHub Issues
-- Provide hardware details for device-specific issues
-- Include Serial output logs when relevant
-- Specify firmware version and variant
 
-## Build and Flash Instructions
+**Expected Information**:
+- Board model (e.g., "Heltec v3", "SenseCAP Indicator D1L")
+- MeshCore version (git commit hash)
+- Steps to reproduce
+- Expected vs actual behavior
+- Serial output/logs (if applicable)
 
-### Web Flasher (Easiest)
-- Visit https://flasher.meshcore.co.uk
-- Select device
-- Choose firmware type (Companion, Repeater, Room Server)
-- Flash via browser
+**Where to Report**:
+- **Bugs**: GitHub Issues (if you can public)
+- **Security**: Maintainer email (see above)
+- **Questions**: GitHub Discussions or Discord
 
-### Development Build
-- Install PlatformIO in Visual Studio Code
-- Clone repository
-- Open in VS Code
-- Select environment in platformio.ini
-- Build and upload
+### Community Channels
 
-### For D1L Development
-- Use environment: d1l-companion or d1l-repeater
-- Note: Currently non-functional pending HAL implementation
-- Requires physical hardware for testing
+- **GitHub**: https://github.com/ripplebiz/MeshCore
+- **Discord**: https://discord.gg/BMwCtwHj5V (ask for invite)
+- **Website**: https://buymeacoffee.com/ripplebiz
+- **Network**: apraide.lv (community testing network)
 
-## File Organization Expectations
+---
 
-### Core Library Files
-Place in src/ with corresponding .h in src/
-Keep focused - one class/module per file pair
-Minimize cross-dependencies
+## 13. Quick Reference for AI Assistants
 
-### Hardware Variants
-Create subdirectory in variants/
-Include: target.h, target.cpp, platformio.ini, README.md
-Follow naming convention: devicename_variant
+### When Asked to...
 
-### Documentation
-Technical docs in docs/
-Hardware-specific in docs/hardware/
-Keep markdown files well-structured
-Use relative links between docs
+**Add a New Feature**
+1. Check roadmap and existing issues (don't duplicate)
+2. Discuss scope first (open an issue)
+3. Create feature branch from `dev`
+4. No dynamic allocation in runtime paths
+5. Test on 2+ boards if possible
+6. Update docs and submit PR to `dev`
 
-### Build Scripts
-Root level for top-level scripts
-bin/ for helper utilities
-Use .sh for shell scripts, .py for Python
+**Fix a Bug**
+1. Reproduce on hardware or identify minimal test case
+2. Trace through Dispatcher → Mesh → handlers
+3. Check memory/stack usage (embedded systems!)
+4. Write test if possible
+5. Verify fix doesn't break other boards
 
-## Code Review Expectations
+**Optimize Performance**
+1. Measure first: memory usage, latency, CPU
+2. Identify bottleneck with data, not guesses
+3. Stack allocation > heap allocation > dynamic
+4. Profile after change; verify improvement
+5. Document tradeoffs (speed vs memory vs complexity)
 
-### What Reviewers Look For
-- Memory allocation compliance
-- Code style consistency
-- No unnecessary complexity
-- Proper error handling
-- Documentation completeness
-- Hardware-specific comments
-- Breaking change awareness
+**Support a New Board**
+1. Create `/variants/board_name/` directory
+2. Implement `target.cpp` with radio/display/storage init
+3. Update `platformio.ini` with build flags
+4. Test compiles without errors
+5. Document known issues (untested, if applicable)
 
-### Common Rejection Reasons
-- Dynamic memory allocation in wrong places
-- Reformatting existing code
-- Overly complex abstractions
-- Missing documentation
-- Hardcoded secrets
-- Breaking changes without discussion
+**Write Documentation**
+1. Markdown format, clear examples
+2. Include code snippets from actual source
+3. Explain WHY, not just WHAT
+4. Add cross-references to related docs
+5. Target both expert and beginner readers
 
-## Current Repository Status
+### Critical Checks Before Suggesting Code
 
-### Nightly Branch State
-- Active D1L development
-- Contains docs/hardware/d1l_pin_research.md with comprehensive hardware analysis
-- CHANGELOG.md tracks D1L changes
-- D1L variant structure created but non-functional
-- Awaiting HAL implementation decision
+- ✅ No `new`/`malloc`/`delete` in loop/handler code
+- ✅ Respects existing code style (no retroactive reformatting)
+- ✅ Compiles with `-Wall -Wextra`
+- ✅ Header includes are actually used
+- ✅ Comments explain reasoning (not obvious code)
+- ✅ Tested on relevant hardware (or clearly marked untested)
+- ✅ Updated docs if adding public APIs
 
-### Recent Changes
-- Security hardening completed
-- EU NARROW mode migration completed
-- Documentation improvements ongoing
-- CI workflows added for D1L validation
+---
 
-### Next Steps Needed
-- Decide on IO expander HAL approach
-- Implement chosen solution
-- Complete D1L testing checklist
-- Update documentation with results
-- Merge to dev when stable
+## Document Metadata
+
+- **Last Updated**: December 27, 2025
+- **MeshCore Version**: 1.10.0
+- **Primary Focus**: SenseCAP Indicator D1L support (Nightly branch)
+- **Maintainer**: Scott Powell / rippleradios.com
+- **License**: MIT (see license.txt)
+- **For Questions**: Contact via GitHub Issues or Discord
+
+---
+
+**Remember**: MeshCore is designed for constrained embedded systems. When in doubt, choose simplicity, correctness, and efficiency over cleverness. Think like an embedded engineer, not a high-level programmer.
