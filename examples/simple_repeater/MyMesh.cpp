@@ -1485,6 +1485,7 @@ void MyMesh::handleCmdFrame(size_t len) {
       Serial.println("Mesh time sync FAILED");
       writeErrFrame(ERR_CODE_ILLEGAL_ARG);
     }
+    }  // Close validation else block
 
   } else {
     // Unsupported command for repeater
