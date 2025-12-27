@@ -460,7 +460,7 @@ DIO1 interrupt not triggering on packet reception
 
 - [Implementation Guide](../../docs/hardware/SENSECAP_INDICATOR_IMPLEMENTATION.md) - 19-29 day development plan
 - [Hardware Overview](../../docs/hardware/HARDWARE_OVERVIEW.md) - All supported hardware
-- [PIN_RESEARCH.md](../../PIN_RESEARCH.md) - Original research and findings
+- [docs/hardware/d1l_pin_research.md](../../docs/hardware/d1l_pin_research.md) - Original research and findings
 
 ### External Resources
 

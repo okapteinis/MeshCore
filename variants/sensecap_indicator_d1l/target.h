@@ -6,7 +6,7 @@
 //
 // IMPORTANT: This variant uses an IO Expander for SX1262 control pins
 // The IO expander is at I2C address 0x40 and requires HAL support
-// See PIN_RESEARCH.md for details
+// See docs/hardware/d1l_pin_research.md for details
 
 #define RADIOLIB_STATIC_ONLY 1
 #include <RadioLib.h>
