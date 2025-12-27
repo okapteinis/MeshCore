@@ -199,6 +199,21 @@ The **nightly** branch is the active development branch. PR base should be **dev
    - 5-second timeout on radio.begin()
    - Printf format string vulnerabilities closed
 
+5. ✅ **Security Hardening (December 2025)** ⚠️ **NEW**
+   - **Comprehensive Code Review**: 10,000+ word security analysis covering logic, bugs, vulnerabilities, code quality
+   - **5 Critical Vulnerabilities Fixed**:
+     - **Race Conditions in CustomRadioLibHal** - Added virtual_int_mutex to protect virtualInterrupts[] array
+     - **Buffer Overflow in Packet::readFrom()** - Comprehensive bounds checking before all memcpy operations
+     - **TRACE Packet Buffer Overread** - Added payload_len >= 9 validation before parsing
+     - **Private Key Exposure** - Wrapped debug output with #ifdef ENABLE_PRIVATE_KEY_EXPORT
+     - **Time Manipulation Attack** - Timestamp validation (year 2000-2038) in CMD_SET_DEVICE_TIME
+   - **Documentation Created**:
+     - `CODE_REVIEW_REPORT.md` - 755 lines of security analysis
+     - `CRITICAL_ISSUES_GITHUB.md` - Detailed GitHub issue templates
+     - `REMAINING_ISSUES.md` - 3 HIGH/MEDIUM + 10+ LOW priority issues to address
+   - **Branch**: `security/critical-fixes-5-vulns` (PR pending to nightly)
+   - **Status**: 62.5% of HIGH+ priority issues resolved, backward compatible
+
 **In Progress**:
 - Hardware testing on physical devices
 - Sensor integration (RP2040 coprocessor)
