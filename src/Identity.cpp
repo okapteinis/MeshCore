@@ -62,7 +62,12 @@ bool LocalIdentity::writeTo(Stream& s) const {
 
 void LocalIdentity::printTo(Stream& s) const {
   s.print("pub_key: "); Utils::printHex(s, pub_key, PUB_KEY_SIZE); s.println();
+#ifdef ENABLE_PRIVATE_KEY_EXPORT
   s.print("prv_key: "); Utils::printHex(s, prv_key, PRV_KEY_SIZE); s.println();
+#else
+  s.print("prv_key: [REDACTED - enable ENABLE_PRIVATE_KEY_EXPORT to view]");
+  s.println();
+#endif
 }
 
 size_t LocalIdentity::writeTo(uint8_t* dest, size_t max_len) {

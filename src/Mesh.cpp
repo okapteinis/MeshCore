@@ -45,7 +45,8 @@ DispatcherAction Mesh::onRecvPacket(Packet* pkt) {
   }
 
   if (pkt->isRouteDirect() && pkt->getPayloadType() == PAYLOAD_TYPE_TRACE) {
-    if (pkt->path_len < MAX_PATH_SIZE) {
+    // Validate packet has minimum required payload (4+4+1 = 9 bytes)
+    if (pkt->path_len < MAX_PATH_SIZE && pkt->payload_len >= 9) {
       uint8_t i = 0;
       uint32_t trace_tag;
       memcpy(&trace_tag, &pkt->payload[i], 4); i += 4;

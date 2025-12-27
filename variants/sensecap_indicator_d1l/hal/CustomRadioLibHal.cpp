@@ -14,6 +14,18 @@
  */
 SemaphoreHandle_t d1l_i2c_mutex = NULL;
 
+/**
+ * Virtual interrupt array mutex
+ *
+ * Protects the virtualInterrupts[] array from race conditions between:
+ * - Polling task reading interrupt states (pollVirtualInterruptsInternal)
+ * - Main thread modifying interrupt handlers (attachInterrupt/detachInterrupt)
+ *
+ * This is SEPARATE from d1l_i2c_mutex to prevent deadlocks and allow
+ * fine-grained locking (I2C operations can happen without blocking interrupt setup)
+ */
+static SemaphoreHandle_t virtual_int_mutex = NULL;
+
 // Static task function for polling virtual interrupts
 void CustomRadioLibHal::pollTask(void* parameter) {
     CustomRadioLibHal* hal = static_cast<CustomRadioLibHal*>(parameter);
@@ -28,12 +40,35 @@ void CustomRadioLibHal::pollTask(void* parameter) {
 
 // Internal polling function
 void CustomRadioLibHal::pollVirtualInterruptsInternal() {
+    // Quick check without mutex (safe - virtualInterruptCount changes are atomic enough for this use)
     if (virtualInterruptCount == 0) return;
 
     for (int i = 0; i < MAX_VIRTUAL_INTERRUPTS; i++) {
-        if (!virtualInterrupts[i].enabled) continue;
+        // Snapshot interrupt data while holding mutex (minimize critical section)
+        uint32_t pin;
+        uint32_t mode;
+        uint8_t lastState;
+        void (*callback)(void);
+        bool enabled;
 
-        // Read current state from TCA9535 with RAII mutex protection
+        {
+            SemaphoreLockGuard lock(virtual_int_mutex);
+            if (!lock.isLocked()) {
+                Serial.println("[CustomHAL] ERROR: Failed to acquire virtual interrupt mutex in polling task");
+                continue;
+            }
+
+            // Snapshot all needed data
+            enabled = virtualInterrupts[i].enabled;
+            if (!enabled) continue; // Skip disabled interrupts
+
+            pin = virtualInterrupts[i].pin;
+            mode = virtualInterrupts[i].mode;
+            lastState = virtualInterrupts[i].lastState;
+            callback = virtualInterrupts[i].callback;
+        } // Release virtual_int_mutex before I2C access
+
+        // Read current state from TCA9535 with I2C mutex protection
         uint8_t currentState;
         {
             SemaphoreLockGuard lock(d1l_i2c_mutex);
@@ -41,29 +76,34 @@ void CustomRadioLibHal::pollVirtualInterruptsInternal() {
                 Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex in polling task");
                 continue; // Skip this interrupt check
             }
-            currentState = ioExpander->digitalRead(virtualInterrupts[i].pin);
-        } // Mutex automatically released here
-
-        uint8_t lastState = virtualInterrupts[i].lastState;
-        bool trigger = false;
+            currentState = ioExpander->digitalRead(pin);
+        } // Release I2C mutex
 
         // Check if interrupt should fire based on mode
-        if (virtualInterrupts[i].mode == RISING && lastState == LOW && currentState == HIGH) {
+        bool trigger = false;
+        if (mode == RISING && lastState == LOW && currentState == HIGH) {
             trigger = true;
-        } else if (virtualInterrupts[i].mode == FALLING && lastState == HIGH && currentState == LOW) {
+        } else if (mode == FALLING && lastState == HIGH && currentState == LOW) {
             trigger = true;
-        } else if (virtualInterrupts[i].mode == CHANGE && lastState != currentState) {
+        } else if (mode == CHANGE && lastState != currentState) {
             trigger = true;
         }
 
+        // Fire callback OUTSIDE of mutex (callbacks may take time)
         if (trigger) {
             Serial.printf("[CustomHAL] Virtual interrupt triggered on pin %d (%s)\n",
-                        virtualInterrupts[i].pin,
-                        currentState ? "HIGH" : "LOW");
-            virtualInterrupts[i].callback();
+                        pin, currentState ? "HIGH" : "LOW");
+            callback();
         }
 
-        virtualInterrupts[i].lastState = currentState;
+        // Update lastState with mutex protection
+        {
+            SemaphoreLockGuard lock(virtual_int_mutex);
+            if (lock.isLocked() && virtualInterrupts[i].enabled && virtualInterrupts[i].pin == pin) {
+                // Verify interrupt wasn't detached while we were running
+                virtualInterrupts[i].lastState = currentState;
+            }
+        }
     }
 }
 
@@ -90,6 +130,15 @@ CustomRadioLibHal::CustomRadioLibHal(TCA9535_GPIO* gpio, SPIClass& spi, SPISetti
         Serial.println("[CustomHAL] Global I2C mutex created successfully");
     }
 
+    // Initialize virtual interrupt mutex
+    virtual_int_mutex = xSemaphoreCreateMutex();
+    if (virtual_int_mutex == NULL) {
+        Serial.println("[CustomHAL] FATAL: Failed to create virtual interrupt mutex");
+        Serial.println("[CustomHAL] Virtual interrupts will NOT be thread-safe!");
+    } else {
+        Serial.println("[CustomHAL] Virtual interrupt mutex created successfully");
+    }
+
     Serial.println("[CustomHAL] Created");
     Serial.println("[CustomHAL] Virtual pin range: 100-199 → TCA9535");
     Serial.println("[CustomHAL] Real pin range: 0-99 → ESP32 GPIO");
@@ -103,10 +152,15 @@ CustomRadioLibHal::~CustomRadioLibHal() {
         pollTaskHandle = NULL;
     }
 
-    // Delete mutex if created
+    // Delete mutexes if created
     if (d1l_i2c_mutex != NULL) {
         vSemaphoreDelete(d1l_i2c_mutex);
         d1l_i2c_mutex = NULL;
+    }
+
+    if (virtual_int_mutex != NULL) {
+        vSemaphoreDelete(virtual_int_mutex);
+        virtual_int_mutex = NULL;
     }
 
     Serial.println("[CustomHAL] Destructor called - resources cleaned up");
@@ -197,21 +251,38 @@ void CustomRadioLibHal::attachInterrupt(uint32_t interruptNum, void (*interruptC
         Serial.printf("[CustomHAL] attachInterrupt virtual pin %d mode %d\n",
                      interruptNum, mode);
 
+        // Read initial pin state (outside of virtual_int_mutex to avoid nested locking)
+        uint8_t initialState;
+        {
+            SemaphoreLockGuard lock(d1l_i2c_mutex);
+            if (!lock.isLocked()) {
+                Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex for initial state read");
+                return;
+            }
+            initialState = ioExpander->digitalRead(interruptNum);
+            // Also configure pin as input while we have I2C mutex
+            ioExpander->pinMode(interruptNum, INPUT);
+        }
+
+        // Now modify virtualInterrupts array with mutex protection
+        SemaphoreLockGuard lock(virtual_int_mutex);
+        if (!lock.isLocked()) {
+            Serial.println("[CustomHAL] ERROR: Failed to acquire virtual interrupt mutex in attachInterrupt");
+            return;
+        }
+
         // Find empty slot
         for (int i = 0; i < MAX_VIRTUAL_INTERRUPTS; i++) {
             if (!virtualInterrupts[i].enabled) {
                 virtualInterrupts[i].pin = interruptNum;
                 virtualInterrupts[i].callback = interruptCb;
                 virtualInterrupts[i].mode = mode;
-                virtualInterrupts[i].enabled = true;
-                virtualInterrupts[i].lastState = ioExpander->digitalRead(interruptNum);
+                virtualInterrupts[i].lastState = initialState;
+                virtualInterrupts[i].enabled = true;  // Set enabled LAST (atomic publish)
                 virtualInterruptCount++;
 
-                // Configure pin as input
-                ioExpander->pinMode(interruptNum, INPUT);
-
                 Serial.printf("[CustomHAL] Virtual interrupt registered (slot %d, initial state: %s)\n",
-                             i, virtualInterrupts[i].lastState ? "HIGH" : "LOW");
+                             i, initialState ? "HIGH" : "LOW");
                 return;
             }
         }
@@ -229,9 +300,15 @@ void CustomRadioLibHal::detachInterrupt(uint32_t interruptNum) {
     if (isVirtualPin(interruptNum)) {
         Serial.printf("[CustomHAL] detachInterrupt virtual pin %d\n", interruptNum);
 
+        SemaphoreLockGuard lock(virtual_int_mutex);
+        if (!lock.isLocked()) {
+            Serial.println("[CustomHAL] ERROR: Failed to acquire virtual interrupt mutex in detachInterrupt");
+            return;
+        }
+
         for (int i = 0; i < MAX_VIRTUAL_INTERRUPTS; i++) {
             if (virtualInterrupts[i].enabled && virtualInterrupts[i].pin == interruptNum) {
-                virtualInterrupts[i].enabled = false;
+                virtualInterrupts[i].enabled = false;  // Disable FIRST (atomic unpublish)
                 virtualInterruptCount--;
                 Serial.printf("[CustomHAL] Virtual interrupt detached (slot %d)\n", i);
                 return;
@@ -249,26 +326,32 @@ void CustomRadioLibHal::pollVirtualInterrupts() {
 
 // Get statistics
 int CustomRadioLibHal::getVirtualInterruptCount() const {
+    SemaphoreLockGuard lock(virtual_int_mutex);
     return virtualInterruptCount;
 }
 
 // Print status
 void CustomRadioLibHal::printStatus() const {
     Serial.println("===== CustomRadioLibHal Status =====");
-    Serial.printf("Virtual Interrupts: %d / %d active\n",
-                 virtualInterruptCount, MAX_VIRTUAL_INTERRUPTS);
 
-    for (int i = 0; i < MAX_VIRTUAL_INTERRUPTS; i++) {
-        if (virtualInterrupts[i].enabled) {
-            Serial.printf("  Slot %d: Pin %d, Mode %d, State %d\n",
-                         i, virtualInterrupts[i].pin,
-                         virtualInterrupts[i].mode,
-                         virtualInterrupts[i].lastState);
+    {
+        SemaphoreLockGuard lock(virtual_int_mutex);
+        Serial.printf("Virtual Interrupts: %d / %d active\n",
+                     virtualInterruptCount, MAX_VIRTUAL_INTERRUPTS);
+
+        for (int i = 0; i < MAX_VIRTUAL_INTERRUPTS; i++) {
+            if (virtualInterrupts[i].enabled) {
+                Serial.printf("  Slot %d: Pin %d, Mode %d, State %d\n",
+                             i, virtualInterrupts[i].pin,
+                             virtualInterrupts[i].mode,
+                             virtualInterrupts[i].lastState);
+            }
         }
     }
 
     Serial.printf("Polling Task: %s\n", pollTaskHandle != NULL ? "Running" : "Stopped");
     Serial.printf("I2C Mutex: %s\n", d1l_i2c_mutex != NULL ? "Created" : "NULL");
+    Serial.printf("Virtual Interrupt Mutex: %s\n", virtual_int_mutex != NULL ? "Created" : "NULL");
     Serial.println("====================================");
 }
 
