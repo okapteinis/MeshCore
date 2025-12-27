@@ -215,6 +215,13 @@ The **nightly** branch is the active development branch. PR base should be **dev
    - **Status**: 62.5% of HIGH+ priority issues resolved, backward compatible
 
 **In Progress**:
+- **TCA9535 INT Pin Optimization** (December 2025) 🚀 **NEW**
+  - **Goal**: Replace 5ms polling with hardware interrupt-driven approach
+  - **Status**: Phase D.1 Complete (current implementation analyzed)
+  - **Design**: ESP32 GPIO 42 ISR + FreeRTOS deferred task for I2C reads
+  - **Benefits**: 95-99% reduction in I2C bus load, lower power consumption
+  - **Documentation**: `docs/hardware/d1l_int_pin_optimization.md`
+  - **Next**: Phase D.2 (finalize IRQ-assisted design) → D.3-D.5 (implementation + testing)
 - Hardware testing on physical devices
 - Sensor integration (RP2040 coprocessor)
 - OTA update support

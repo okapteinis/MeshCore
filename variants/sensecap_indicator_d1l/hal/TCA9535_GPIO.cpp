@@ -217,6 +217,38 @@ uint8_t TCA9535_GPIO::digitalRead(uint16_t pin) {
     return value;
 }
 
+// Read all input pins at once (both ports)
+uint16_t TCA9535_GPIO::readAllInputs() {
+    if (!initialized) {
+        Serial.println("[TCA9535] ERROR: Not initialized - call begin() first");
+        return 0x0000;
+    }
+
+    // Thread-safe I2C operation with RAII
+    uint16_t allInputs = 0x0000;
+    {
+        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        if (!lock.isLocked()) {
+            Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex in readAllInputs");
+            return 0x0000; // Safe default (all LOW)
+        }
+
+        // Read all 16 pins individually (TCA9555 library doesn't have bulk read)
+        // Bit 0 = pin 0, Bit 15 = pin 15
+        for (int pin = 0; pin < 16; pin++) {
+            uint8_t pinState = ioExpander->read1(pin);
+            if (pinState == HIGH) {
+                allInputs |= (1 << pin);
+            }
+        }
+    }
+
+    // Verbose logging disabled for performance
+    // Serial.printf("[TCA9535] readAllInputs: 0x%04X\n", allInputs);
+
+    return allInputs;
+}
+
 // Check if initialized
 bool TCA9535_GPIO::isInitialized() const {
     return initialized;

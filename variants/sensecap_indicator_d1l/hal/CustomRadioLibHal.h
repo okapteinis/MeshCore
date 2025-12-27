@@ -70,6 +70,11 @@ private:
     TCA9535_GPIO* ioExpander;  // Pointer to TCA9535 GPIO wrapper
     bool initialized;          // Tracks if HAL is properly initialized
 
+#ifdef USE_TCA9535_INT_PIN
+    // Friend declarations for static helper functions
+    friend void intHandlerTask(void* parameter);
+#endif
+
     /**
      * Determine if pin number is virtual (managed by TCA9535)
      *
@@ -103,8 +108,13 @@ private:
     VirtualInterrupt virtualInterrupts[MAX_VIRTUAL_INTERRUPTS];
     int virtualInterruptCount;
 
-    // FreeRTOS task handle for polling
+    // FreeRTOS task handle for polling (or INT handler in INT mode)
     TaskHandle_t pollTaskHandle;
+
+#ifdef USE_TCA9535_INT_PIN
+    // INT pin optimization is enabled (event-driven mode)
+    // Task handle is stored in static variable at file scope (see .cpp)
+#endif
 
     /**
      * FreeRTOS task for polling virtual interrupts
@@ -128,6 +138,17 @@ private:
      * THREAD-SAFE: Uses global d1l_i2c_mutex for I2C read operations
      */
     void pollVirtualInterruptsInternal();
+
+    /**
+     * Process virtual interrupts from pin state snapshot
+     *
+     * Common logic shared by both polling mode and INT-driven mode.
+     * Checks all registered virtual interrupts against the provided pin states
+     * and fires callbacks when state changes match interrupt modes.
+     *
+     * @param inputState 16-bit snapshot of all TCA9535 input pins
+     */
+    void processVirtualInterrupts(uint16_t inputState);
 
 public:
     /**

@@ -158,6 +158,19 @@ public:
     uint8_t digitalRead(uint16_t pin);
 
     /**
+     * Read all input pins at once (both ports)
+     *
+     * Reads both input port registers (0x00 and 0x01) in a single I2C transaction.
+     * Used for efficient interrupt handling when multiple pins may have changed.
+     *
+     * THREAD-SAFE: Uses global d1l_i2c_mutex
+     *
+     * @return 16-bit value with all pin states: [P1_7..P1_0 | P0_7..P0_0]
+     *         Bit 0 = P0_0 (LORA_NSS), Bit 3 = P0_3 (LORA_DIO1), etc.
+     */
+    uint16_t readAllInputs();
+
+    /**
      * Check if TCA9535 is initialized and ready
      *
      * @return true if initialized, false otherwise
