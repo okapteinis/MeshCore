@@ -2,7 +2,9 @@
 
 #include <Arduino.h>
 #include <Mesh.h>
-#include <RTClib.h>
+#ifdef USE_RTC
+  #include <RTClib.h>
+#endif
 #include <target.h>
 
 #if defined(NRF52_PLATFORM) || defined(STM32_PLATFORM)

@@ -341,9 +341,17 @@ bool MyMesh::allowPacketForward(const mesh::Packet *packet) {
 const char *MyMesh::getLogDateTime() {
   static char tmp[32];
   uint32_t now = getRTCClock()->getCurrentTime();
+#ifdef USE_RTC
   DateTime dt = DateTime(now);
   snprintf(tmp, sizeof(tmp), "%02d:%02d:%02d - %d/%d/%d U", dt.hour(), dt.minute(), dt.second(), dt.day(), dt.month(),
           dt.year());
+#else
+  // No RTC available - show uptime in seconds
+  uint32_t hours = now / 3600;
+  uint32_t minutes = (now % 3600) / 60;
+  uint32_t seconds = now % 60;
+  snprintf(tmp, sizeof(tmp), "%02u:%02u:%02u (uptime)", hours, minutes, seconds);
+#endif
   return tmp;
 }
 
@@ -648,7 +656,7 @@ bool MyMesh::onPeerPathRecv(mesh::Packet *packet, int sender_idx, const uint8_t 
 
 void MyMesh::onControlDataRecv(mesh::Packet* packet) {
   uint8_t type = packet->payload[0] & 0xF0;    // just test upper 4 bits
-  if (type == CTL_TYPE_NODE_DISCOVER_REQ && packet->payload_len >= 6 && discover_limiter.allow(rtc_clock.getCurrentTime())) {
+  if (type == CTL_TYPE_NODE_DISCOVER_REQ && packet->payload_len >= 6 && discover_limiter.allow(getRTCClock()->getCurrentTime())) {
     int i = 1;
     uint8_t  filter = packet->payload[i++];
     uint32_t tag;
@@ -1023,7 +1031,7 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
       load_stack[0] = &temp_map.getWildcard();
       region_load_active = true;
     } else if (n >= 2 && strcmp(parts[1], "save") == 0) {
-      _prefs.discovery_mod_timestamp = rtc_clock.getCurrentTime();   // this node is now 'modified' (for discovery info)
+      _prefs.discovery_mod_timestamp = getRTCClock()->getCurrentTime();   // this node is now 'modified' (for discovery info)
       savePrefs();
       bool success = region_map.save(_fs);
       strncpy(reply, success ? "OK" : "Err - save failed", 159);

@@ -1,4 +1,6 @@
 #include "AutoDiscoverRTCClock.h"
+
+#ifdef USE_RTC
 #include "RTClib.h"
 #include <Melopero_RV3028.h>
 
@@ -70,3 +72,5 @@ void AutoDiscoverRTCClock::setCurrentTime(uint32_t time) {
     _fallback->setCurrentTime(time);
   }
 }
+
+#endif // USE_RTC

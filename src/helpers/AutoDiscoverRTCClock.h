@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 
+#ifdef USE_RTC
 class AutoDiscoverRTCClock : public mesh::RTCClock {
   mesh::RTCClock* _fallback;
 
@@ -19,3 +20,4 @@ public:
     _fallback->tick();   // is typically VolatileRTCClock, which now needs tick()
   }
 };
+#endif // USE_RTC

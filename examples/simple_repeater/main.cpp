@@ -21,7 +21,11 @@
 StdRNG fast_rng;
 SimpleMeshTables tables;
 
+#ifdef USE_RTC
 MyMesh the_mesh(board, radio_driver, *new ArduinoMillis(), fast_rng, rtc_clock, tables);
+#else
+MyMesh the_mesh(board, radio_driver, *new ArduinoMillis(), fast_rng, fallback_clock, tables);
+#endif
 
 void halt() {
   while (1) ;
@@ -194,5 +198,9 @@ void loop() {
 #ifdef DISPLAY_CLASS
   ui_task.loop();
 #endif
+#ifdef USE_RTC
   rtc_clock.tick();
+#else
+  fallback_clock.tick();
+#endif
 }

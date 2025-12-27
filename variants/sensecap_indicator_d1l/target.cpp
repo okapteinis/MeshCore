@@ -141,7 +141,9 @@ bool fail_and_cleanup(const char* error_msg) {
 
 // Other globals (keep as-is)
 ESP32RTCClock fallback_clock;
+#ifdef USE_RTC
 AutoDiscoverRTCClock rtc_clock(fallback_clock);
+#endif
 EnvironmentSensorManager sensors;
 
 #ifdef DISPLAY_CLASS
@@ -304,7 +306,9 @@ bool radio_init() {
 
   // Initialize Clocks
   fallback_clock.begin();
+#ifdef USE_RTC
   rtc_clock.begin(Wire);
+#endif
 
 #if RADIO_DRIVER_AVAILABLE
   // Initialize HAL

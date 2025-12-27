@@ -19,7 +19,9 @@
 #include <helpers/ESP32Board.h>
 #include <helpers/radiolib/RadioLibWrappers.h>
 #include <helpers/radiolib/CustomSX1262Wrapper.h>
+#ifdef USE_RTC
 #include <helpers/AutoDiscoverRTCClock.h>
+#endif
 #include <helpers/SensorManager.h>
 #include <helpers/sensors/EnvironmentSensorManager.h>
 
@@ -32,7 +34,9 @@
 extern ESP32Board board;
 extern CustomSX1262Wrapper radio_driver;
 extern ESP32RTCClock fallback_clock;
+#ifdef USE_RTC
 extern AutoDiscoverRTCClock rtc_clock;
+#endif
 extern EnvironmentSensorManager sensors;
 
 #ifdef USE_CUSTOM_RADIOLIB_HAL
