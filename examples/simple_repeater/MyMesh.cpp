@@ -103,7 +103,8 @@ uint8_t MyMesh::handleLoginReq(const mesh::Identity& sender, const uint8_t* secr
       perms = PERM_ACL_GUEST;
     } else {
 #if MESH_DEBUG
-      MESH_DEBUG_PRINTLN("Invalid password: %s", data);
+      MESH_DEBUG_PRINTLN("Invalid password: received='%s' (len=%d), expected='%s' (len=%d)",
+                         data, strlen((char*)data), _prefs.password, strlen(_prefs.password));
 #endif
       return 0;
     }
@@ -298,6 +299,14 @@ int MyMesh::handleRequest(ClientInfo *sender, uint32_t sender_timestamp, uint8_t
 
       return reply_offset;
     }
+  }
+  // Handle keep-alive (ping) requests - respond with simple ACK
+  if (payload[0] == REQ_TYPE_KEEP_ALIVE) {
+    // Update client last activity time (already done by caller)
+    // Send a minimal response - just the timestamp echo + a status byte
+    reply_data[4] = 0x00;  // Status OK
+    MESH_DEBUG_PRINTLN("REQ_TYPE_KEEP_ALIVE: responding to ping");
+    return 5;  // 4 bytes timestamp + 1 byte status
   }
   return 0; // unknown command
 }
@@ -1438,8 +1447,7 @@ void MyMesh::handleCmdFrame(size_t len) {
       // Format and print confirmation
       time_t now = time(NULL);
       struct tm *timeinfo = localtime(&now);
-1429
-{
+      if (timeinfo != nullptr) {
         // Log success with full date/time
         MESH_DEBUG_PRINTLN("CMD_SET_DEVICE_TIME: Mesh time sync OK: %lu seconds (%04d-%02d-%02d %02d:%02d:%02d)",
                            epochSeconds,
@@ -1449,18 +1457,18 @@ void MyMesh::handleCmdFrame(size_t len) {
         Serial.printf("%04d-%02d-%02d %02d:%02d:%02d)\n",
                       timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
                       timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-    } else {
+      } else {
         // Log success but indicate localtime() failure
         MESH_DEBUG_PRINTLN("CMD_SET_DEVICE_TIME: Mesh time sync OK, but localtime() failed. Epoch: %lu", epochSeconds);
         Serial.printf("Mesh time sync OK: %lu seconds (localtime() failed)\n", epochSeconds);
+      }
+      writeOKFrame();
+    } else {
+      // Handle settimeofday() failure
+      MESH_DEBUG_PRINTLN("CMD_SET_DEVICE_TIME: Mesh time sync FAILED");
+      Serial.println("Mesh time sync FAILED");
+      writeErrFrame(ERR_CODE_ILLEGAL_ARG);
     }
-    writeOKFrame();
-} else {
-    // Handle settimeofday() failure
-    MESH_DEBUG_PRINTLN("CMD_SET_DEVICE_TIME: Mesh time sync FAILED");
-    Serial.println("Mesh time sync FAILED");
-    writeErrFrame(ERR_CODE_ILLEGAL_ARG);
-}
 
   } else {
     // Unsupported command for repeater

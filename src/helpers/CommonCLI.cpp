@@ -245,8 +245,14 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, const char* command, ch
     } else if (memcmp(command, "password ", 9) == 0) {
       // change admin password
       StrHelper::strncpy(_prefs->password, &command[9], sizeof(_prefs->password));
+      // Defensive: ensure null-termination and trim trailing whitespace
+      _prefs->password[sizeof(_prefs->password) - 1] = '\0';
+      int len = strlen(_prefs->password);
+      while (len > 0 && (_prefs->password[len-1] == ' ' || _prefs->password[len-1] == '\r' || _prefs->password[len-1] == '\n')) {
+        _prefs->password[--len] = '\0';
+      }
       savePrefs();
-      sprintf(reply, "password now: %s", _prefs->password);   // echo back just to let admin know for sure!!
+      sprintf(reply, "password now: %s (len=%d)", _prefs->password, strlen(_prefs->password));   // echo back with length
     } else if (memcmp(command, "clear stats", 11) == 0) {
       _callbacks->clearStats();
       strcpy(reply, "(OK - stats reset)");
@@ -391,8 +397,14 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, const char* command, ch
         }
       } else if (memcmp(config, "guest.password ", 15) == 0) {
         StrHelper::strncpy(_prefs->guest_password, &config[15], sizeof(_prefs->guest_password));
+        // Defensive: ensure null-termination and trim trailing whitespace
+        _prefs->guest_password[sizeof(_prefs->guest_password) - 1] = '\0';
+        int len = strlen(_prefs->guest_password);
+        while (len > 0 && (_prefs->guest_password[len-1] == ' ' || _prefs->guest_password[len-1] == '\r' || _prefs->guest_password[len-1] == '\n')) {
+          _prefs->guest_password[--len] = '\0';
+        }
         savePrefs();
-        strcpy(reply, "OK");
+        sprintf(reply, "OK (len=%d)", strlen(_prefs->guest_password));
       } else if (sender_timestamp == 0 &&
                  memcmp(config, "prv.key ", 8) == 0) { // from serial command line only
         uint8_t prv_key[PRV_KEY_SIZE];
