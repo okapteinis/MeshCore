@@ -52,26 +52,29 @@ uint16_t readAllInputs();
 
 ```cpp
 uint16_t TCA9535_GPIO::readAllInputs() {
-    if (!initialized) return 0x0000;
+    if (!initialized) {
+        Serial.println("[TCA9535] ERROR: Not initialized - call begin() first");
+        return 0x0000;
+    }
 
     uint16_t allInputs = 0x0000;
     {
         SemaphoreLockGuard lock(d1l_i2c_mutex);
-        if (!lock.isLocked()) return 0x0000;
-
-        // Read all 16 pins individually (TCA9555 library doesn't have bulk read)
-        for (int pin = 0; pin < 16; pin++) {
-            uint8_t pinState = ioExpander->read1(pin);
-            if (pinState == HIGH) {
-                allInputs |= (1 << pin);
-            }
+        if (!lock.isLocked()) {
+            Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex");
+            return 0x0000;
         }
+
+        // EFFICIENCY: Use read16() to read both ports in 2 I2C transactions
+        // (instead of 16 individual read1() calls = 16 I2C transactions)
+        // Returns: [P1_7..P1_0 | P0_7..P0_0] where bit 0 = P0_0, bit 15 = P1_7
+        allInputs = ioExpander->read16();
     }
     return allInputs;
 }
 ```
 
-**Impact**: Thread-safe bulk read of all GPIO states
+**Impact**: Thread-safe bulk read with 87.5% reduction in I2C transactions (2 instead of 16)
 
 ---
 
@@ -123,17 +126,23 @@ void intHandlerTask(void* parameter) {
     while (true) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);  // Block until INT
 
-        // Read TCA9535 input registers (auto-clears INT)
-        uint16_t inputState = hal->ioExpander->readAllInputs();
+        // Level-triggered INT handling: loop while INT pin is LOW
+        do {
+            uint16_t inputState;
+            {
+                SemaphoreLockGuard lock(d1l_i2c_mutex);
+                if (!lock.isLocked()) {
+                    Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex");
+                    break;
+                }
+                // Read all 16 TCA9535 inputs (2 I2C transactions instead of 16)
+                inputState = hal->ioExpander->readAllInputs();
+            }
 
-        // Process virtual interrupts
-        hal->processVirtualInterrupts(inputState);
-
-        // Handle burst changes (INT still LOW)
-        if (digitalRead(TCA9535_INT_PIN) == LOW) {
-            inputState = hal->ioExpander->readAllInputs();
+            // Process virtual interrupts
             hal->processVirtualInterrupts(inputState);
-        }
+
+        } while (digitalRead(TCA9535_INT_PIN) == LOW);
     }
 }
 #endif

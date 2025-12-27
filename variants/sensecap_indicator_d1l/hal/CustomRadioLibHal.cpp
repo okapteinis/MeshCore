@@ -122,68 +122,20 @@ void CustomRadioLibHal::pollVirtualInterruptsInternal() {
     // Quick check without mutex (safe - virtualInterruptCount changes are atomic enough for this use)
     if (virtualInterruptCount == 0) return;
 
-    for (int i = 0; i < MAX_VIRTUAL_INTERRUPTS; i++) {
-        // Snapshot interrupt data while holding mutex (minimize critical section)
-        uint32_t pin;
-        uint32_t mode;
-        uint8_t lastState;
-        void (*callback)(void);
-        bool enabled;
-
-        {
-            SemaphoreLockGuard lock(virtual_int_mutex);
-            if (!lock.isLocked()) {
-                Serial.println("[CustomHAL] ERROR: Failed to acquire virtual interrupt mutex in polling task");
-                continue;
-            }
-
-            // Snapshot all needed data
-            enabled = virtualInterrupts[i].enabled;
-            if (!enabled) continue; // Skip disabled interrupts
-
-            pin = virtualInterrupts[i].pin;
-            mode = virtualInterrupts[i].mode;
-            lastState = virtualInterrupts[i].lastState;
-            callback = virtualInterrupts[i].callback;
-        } // Release virtual_int_mutex before I2C access
-
-        // Read current state from TCA9535 with I2C mutex protection
-        uint8_t currentState;
-        {
-            SemaphoreLockGuard lock(d1l_i2c_mutex);
-            if (!lock.isLocked()) {
-                Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex in polling task");
-                continue; // Skip this interrupt check
-            }
-            currentState = ioExpander->digitalRead(pin);
-        } // Release I2C mutex
-
-        // Check if interrupt should fire based on mode
-        bool trigger = false;
-        if (mode == RISING && lastState == LOW && currentState == HIGH) {
-            trigger = true;
-        } else if (mode == FALLING && lastState == HIGH && currentState == LOW) {
-            trigger = true;
-        } else if (mode == CHANGE && lastState != currentState) {
-            trigger = true;
+    // EFFICIENCY: Read all TCA9535 inputs at once (2 I2C transactions for 16 pins)
+    // instead of reading each pin individually (16 I2C transactions)
+    uint16_t inputState;
+    {
+        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        if (!lock.isLocked()) {
+            Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex in polling task");
+            return;
         }
-
-        // Fire callback OUTSIDE of mutex (callbacks may take time)
-        if (trigger) {
-            Serial.printf("[CustomHAL] Virtual interrupt triggered on pin %d (%s)\n",
-                        pin, currentState ? "HIGH" : "LOW");
-            callback();
-        }
-
-        // Update lastState with mutex protection
-        {
-            SemaphoreLockGuard lock(virtual_int_mutex);
-            if (lock.isLocked() && virtualInterrupts[i].enabled && virtualInterrupts[i].pin == pin) {
-                // Verify interrupt wasn't detached while we were running
-                virtualInterrupts[i].lastState = currentState;
-            }
-        }
+        inputState = ioExpander->readAllInputs();
     }
+
+    // Process all virtual interrupts using the shared logic
+    processVirtualInterrupts(inputState);
 }
 
 // Process virtual interrupts from pin state snapshot
