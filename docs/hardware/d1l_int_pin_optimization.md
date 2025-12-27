@@ -287,25 +287,24 @@ static void intHandlerTask(void* parameter) {
         // ulTaskNotifyTake clears notification count and returns number of notifications
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        // Read TCA9535 input registers (auto-clears INT)
-        uint16_t inputState;
-        {
-            SemaphoreLockGuard lock(d1l_i2c_mutex);
-            if (!lock.isLocked()) {
-                Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex in INT handler");
-                continue;
+        // Level-triggered INT handling: loop while INT pin is LOW
+        // This ensures no missed interrupts when multiple state changes occur
+        do {
+            uint16_t inputState;
+            {
+                SemaphoreLockGuard lock(d1l_i2c_mutex);
+                if (!lock.isLocked()) {
+                    Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex in INT handler");
+                    break;
+                }
+                // Read all 16 TCA9535 inputs at once (2 I2C transactions instead of 16)
+                inputState = hal->ioExpander->readAllInputs();
             }
-            inputState = hal->ioExpander->readAllInputs();  // NEW METHOD
-        }
 
-        // Process all registered virtual interrupts
-        hal->processVirtualInterrupts(inputState);
+            // Process all registered virtual interrupts
+            hal->processVirtualInterrupts(inputState);
 
-        // Check if INT is still LOW (multiple changes occurred during processing)
-        if (digitalRead(TCA9535_INT_PIN) == LOW) {
-            Serial.println("[CustomHAL] INT still LOW - re-triggering handler");
-            vTaskNotifyGive(xTaskGetCurrentTaskHandle());  // Self-signal
-        }
+        } while (digitalRead(TCA9535_INT_PIN) == LOW);
     }
 }
 ```
@@ -380,8 +379,26 @@ uint16_t readAllInputs();  // Read both input port registers (0x00 and 0x01)
 
 // In TCA9535_GPIO.cpp
 uint16_t TCA9535_GPIO::readAllInputs() {
-    // Read input registers 0x00 (P0) and 0x01 (P1)
-    // Returns 16-bit value: [P1_7..P1_0 | P0_7..P0_0]
+    if (!initialized) {
+        Serial.println("[TCA9535] ERROR: Not initialized - call begin() first");
+        return 0x0000;
+    }
+
+    uint16_t allInputs = 0x0000;
+    {
+        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        if (!lock.isLocked()) {
+            Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex");
+            return 0x0000;
+        }
+
+        // EFFICIENCY: Use read16() to read both ports in 2 I2C transactions
+        // (instead of 16 individual read1() calls = 16 I2C transactions)
+        // Returns: [P1_7..P1_0 | P0_7..P0_0] where bit 0 = P0_0, bit 15 = P1_7
+        allInputs = ioExpander->read16();
+    }
+
+    return allInputs;
 }
 ```
 

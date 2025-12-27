@@ -442,6 +442,21 @@ bool radio_init() {
 #endif
 
   Serial.println("SX1262 initialized successfully");
+
+  // CRITICAL FIX: RadioLib bug workaround for interrupt pin
+  // RadioLib's SX126x implementation may not properly preserve the Module's IRQ pin
+  // when using custom HAL. Verify and fix if necessary.
+  Serial.printf("DEBUG: Checking Module IRQ pin after radio.begin()...\n");
+  Serial.printf("DEBUG: Module IRQ pin = %d (expected: %d)\n",
+                radio->mod->irqPin, TCA9535_GPIO::LORA_DIO1);
+
+  if (radio->mod->irqPin != TCA9535_GPIO::LORA_DIO1) {
+    Serial.println("WARNING: Module IRQ pin was reset! Fixing...");
+    radio->mod->irqPin = TCA9535_GPIO::LORA_DIO1;
+    Serial.printf("DEBUG: Module IRQ pin corrected to %d\n", radio->mod->irqPin);
+  } else {
+    Serial.println("DEBUG: Module IRQ pin is correct");
+  }
   Serial.println("BOOT COMPLETE\n");
 #endif // RADIO_DRIVER_AVAILABLE
   return true;
