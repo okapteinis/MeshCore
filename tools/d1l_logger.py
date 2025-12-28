@@ -6,6 +6,7 @@ Uses Python's serial library for reliable serial communication
 
 import argparse
 import serial
+import serial.tools.list_ports
 import sys
 import time
 from datetime import datetime
@@ -14,27 +15,38 @@ from pathlib import Path
 DEFAULT_BAUD_RATE = 115200
 DEFAULT_LOG_DIR = "./monitoring_logs"
 
+# USB Vendor ID for CH9102 chip (used in SenseCAP Indicator D1L)
+D1L_VID = 0x1A86
+
 def find_serial_port():
     """
-    Try to auto-detect D1L serial port on macOS/Linux.
-    Returns None if not found.
+    Try to auto-detect D1L serial port using USB VID lookup.
+    Falls back to device name patterns if VID lookup fails.
+
+    Returns: Port device path (e.g., /dev/cu.usbserial-1110) or None if not found.
     """
-    import glob
+    ports = list(serial.tools.list_ports.comports())
 
-    # macOS patterns
-    patterns = [
-        '/dev/cu.usbserial-*',
-        '/dev/cu.SLAB_USBtoUART',
-        '/dev/cu.usbmodem*',
-        # Linux patterns
-        '/dev/ttyUSB*',
-        '/dev/ttyACM*',
-    ]
+    if not ports:
+        return None
 
-    for pattern in patterns:
-        ports = glob.glob(pattern)
-        if ports:
-            return ports[0]  # Return first match
+    # Strategy 1: Look for D1L by USB Vendor ID (CH9102 = 0x1A86)
+    for port in ports:
+        if port.vid == D1L_VID:
+            print(f"Found D1L by VID {hex(D1L_VID)}: {port.device}")
+            if port.manufacturer:
+                print(f"  Manufacturer: {port.manufacturer}")
+            if port.product:
+                print(f"  Product: {port.product}")
+            return port.device
+
+    # Strategy 2: Fallback to device name patterns (for robustness)
+    name_patterns = ['usbserial', 'ttyUSB', 'ttyACM', 'SLAB_USBtoUART', 'usbmodem']
+    for port in ports:
+        for pattern in name_patterns:
+            if pattern in port.device:
+                print(f"Found serial device by name pattern '{pattern}': {port.device}")
+                return port.device
 
     return None
 
