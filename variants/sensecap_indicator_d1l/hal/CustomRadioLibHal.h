@@ -235,6 +235,21 @@ public:
     void detachInterrupt(uint32_t interruptNum) override;
 
     /**
+     * Override pinToInterrupt - handle virtual pins
+     *
+     * For virtual pins (100-199), returns the pin number itself since
+     * we handle interrupts in software. For real pins (0-99), delegates
+     * to ArduinoHal's implementation which uses digitalPinToInterrupt().
+     *
+     * This fixes RadioLib calling pinToInterrupt(103) which would return -1
+     * from the default ESP32 implementation.
+     *
+     * @param pin Pin number (virtual or real)
+     * @return Interrupt number (same as pin for virtual pins)
+     */
+    uint32_t pinToInterrupt(uint32_t pin) override;
+
+    /**
      * Public method to manually poll interrupts
      *
      * Optional - the FreeRTOS task does this automatically.

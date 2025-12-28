@@ -262,8 +262,15 @@ pio run -e SenseCapIndicator-D1L_repeater -t upload --upload-port /dev/cu.usbser
 # Standard PlatformIO monitor
 pio device monitor --port /dev/cu.usbserial-XXXX --baud 115200
 
-# D1L logger (recommended for macOS - more reliable, with heartbeat)
+# D1L logger (recommended - more reliable, with heartbeat and event filtering)
+# With explicit port
+python3 tools/d1l_logger.py --port /dev/cu.usbserial-XXXX
+
+# Auto-detect port (macOS/Linux)
 python3 tools/d1l_logger.py
+
+# Custom log directory
+python3 tools/d1l_logger.py --port /dev/cu.usbserial-XXXX --log-dir ./custom_logs
 ```
 
 ### Supporting Hardware (Secondary)
