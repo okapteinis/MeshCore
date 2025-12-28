@@ -1,5 +1,38 @@
 # CLAUDE.md - MeshCore AI Assistant Context Guide
 
+## ⚠️ PROJECT STATUS: SenseCAP Indicator D1L Fork
+
+**This document covers the D1L-focused fork of MeshCore (nightly branch).**
+
+### Current D1L Implementation Status
+
+- **Radio (LoRa RX/TX)**: ✅ **FULLY FUNCTIONAL**
+  - SX1262 driver working reliably
+  - EU Narrow mode (869.618 MHz) operational
+  - Mesh networking proven stable
+  - Repeater mode validated
+
+- **Display/Screen (ILI9341)**: 🔄 **IN PROGRESS - NOT OPERATIONAL**
+  - Currently non-functional (work in progress)
+  - Display driver debugging required
+  - Expected completion: **Q2 2026**
+
+- **Development Timeline**: 
+  - **Current**: Maintenance mode (Q4 2025)
+  - **Q2 2026**: Full feature push - display support, optimizations, testing
+  - **Nightly Branch**: Primary development branch for D1L
+
+### What This Means for Contributors & Users
+
+- ✅ **Ready to use as a LoRa radio/repeater**: Radio is production-stable
+- ❌ **Not ready as a mobile companion app**: Display support needed for that
+- 🌟 **Actively seeking contributors**: Display driver expertise welcome
+- 📄 **See STATUS.md for full details**: Comprehensive feature breakdown included
+
+---
+
+
+
 This document provides comprehensive context for AI assistants, collaborators, and developers working on MeshCore. Refer to this guide when planning contributions, understanding architecture, or implementing new features.
 
 ---
