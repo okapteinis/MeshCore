@@ -88,7 +88,7 @@ void intHandlerTask(void* parameter) {
             // Read TCA9535 input registers (this auto-clears the INT pin if all changes are read)
             uint16_t inputState;
             {
-                SemaphoreLockGuard lock(d1l_i2c_mutex);
+                RecursiveSemaphoreLockGuard lock(d1l_i2c_mutex);
                 if (!lock.isLocked()) {
                     Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex in INT handler");
                     break; // Exit do/while, return to waiting for next notification
@@ -126,7 +126,7 @@ void CustomRadioLibHal::pollVirtualInterruptsInternal() {
     // instead of reading each pin individually (16 I2C transactions)
     uint16_t inputState;
     {
-        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        RecursiveSemaphoreLockGuard lock(d1l_i2c_mutex);
         if (!lock.isLocked()) {
             Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex in polling task");
             return;
@@ -222,7 +222,8 @@ CustomRadioLibHal::CustomRadioLibHal(TCA9535_GPIO* gpio, SPIClass& spi, SPISetti
 
     // CRITICAL: Initialize global I2C mutex FIRST
     // This MUST happen before any TCA9535_GPIO operations
-    d1l_i2c_mutex = xSemaphoreCreateMutex();
+    // Using RECURSIVE mutex to allow nested locking (e.g. attachInterrupt → digitalRead)
+    d1l_i2c_mutex = xSemaphoreCreateRecursiveMutex();
     if (d1l_i2c_mutex == NULL) {
         Serial.println("[CustomHAL] FATAL: Failed to create I2C mutex");
         Serial.println("[CustomHAL] System cannot guarantee thread-safety!");
@@ -409,7 +410,7 @@ void CustomRadioLibHal::attachInterrupt(uint32_t interruptNum, void (*interruptC
         // Read initial pin state (outside of virtual_int_mutex to avoid nested locking)
         uint8_t initialState;
         {
-            SemaphoreLockGuard lock(d1l_i2c_mutex);
+            RecursiveSemaphoreLockGuard lock(d1l_i2c_mutex);
             if (!lock.isLocked()) {
                 Serial.println("[CustomHAL] ERROR: Failed to acquire I2C mutex for initial state read");
                 return;
@@ -471,6 +472,18 @@ void CustomRadioLibHal::detachInterrupt(uint32_t interruptNum) {
         }
     } else {
         ArduinoHal::detachInterrupt(interruptNum);
+    }
+}
+
+// pinToInterrupt override
+uint32_t CustomRadioLibHal::pinToInterrupt(uint32_t pin) {
+    if (isVirtualPin(pin)) {
+        // For virtual pins, return the pin number itself
+        // We handle interrupts in software, so the interrupt number == pin number
+        return pin;
+    } else {
+        // For real ESP32 pins, use the base class implementation
+        return ArduinoHal::pinToInterrupt(pin);
     }
 }
 

@@ -214,6 +214,20 @@ The **nightly** branch is the active development branch. PR base should be **dev
    - **Branch**: `security/critical-fixes-5-vulns` (PR pending to nightly)
    - **Status**: 62.5% of HIGH+ priority issues resolved, backward compatible
 
+6. ✅ **I2C Mutex Deadlock Fix (December 2025)** ⚠️ **CRITICAL**
+   - **Issue**: Complete RX failure (recv:0) due to recursive mutex deadlock in D1L I2C bus protection
+   - **Root Cause**: `CustomRadioLibHal::attachInterrupt()` → `TCA9535_GPIO::digitalRead()` nested locking with regular mutex
+   - **Solution**: Converted `d1l_i2c_mutex` to recursive mutex (`xSemaphoreCreateRecursiveMutex()`)
+   - **Result**: RX fully functional, neighbors discovered, ping working (14.75dB SNR)
+   - **Files Changed**:
+     - `variants/sensecap_indicator_d1l/hal/freertos_util.h` - Added RecursiveSemaphoreLockGuard
+     - `variants/sensecap_indicator_d1l/hal/CustomRadioLibHal.cpp` - Changed mutex creation + 3 usages
+     - `variants/sensecap_indicator_d1l/hal/TCA9535_GPIO.cpp` - Changed 5 mutex usages
+   - **Documentation**: `docs/hardware/D1L_GUIDE.md` - Complete flashing guide + post-mortem
+   - **Branch**: `feature/d1l-rx-deadlock-fix`
+   - **Status**: ✅ Verified working on hardware, ready for merge
+   - **IMPORTANT**: D1L REQUIRES recursive mutex for d1l_i2c_mutex due to TCA9535 I/O expander architecture
+
 **In Progress**:
 - **TCA9535 INT Pin Optimization** (December 2025) 🚀 **NEW**
   - **Goal**: Replace 5ms polling with hardware interrupt-driven approach
@@ -235,10 +249,21 @@ The **nightly** branch is the active development branch. PR base should be **dev
 **Build Commands**:
 ```bash
 # Companion radio with USB
-pio run -e SenseCapIndicator-D1L_comp_radio_usb -t upload
+pio run -e SenseCapIndicator-D1L_comp_radio_usb -t upload --upload-port /dev/cu.usbserial-XXXX
 
-# Repeater mode
-pio run -e SenseCapIndicator-D1L_repeater -t upload
+# Repeater mode (recommended)
+pio run -e SenseCapIndicator-D1L_repeater -t upload --upload-port /dev/cu.usbserial-XXXX
+
+# Note: Replace /dev/cu.usbserial-XXXX with actual port (use: ls /dev/cu.usbserial-*)
+```
+
+**Monitoring Tools**:
+```bash
+# Standard PlatformIO monitor
+pio device monitor --port /dev/cu.usbserial-XXXX --baud 115200
+
+# D1L logger (recommended for macOS - more reliable, with heartbeat)
+python3 tools/d1l_logger.py
 ```
 
 ### Supporting Hardware (Secondary)

@@ -48,7 +48,7 @@ bool TCA9535_GPIO::begin(TwoWire* wire) {
     // Initialize the driver (sets pin modes) - thread-safe I2C operation with RAII
     bool initSuccess = false;
     {
-        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        RecursiveSemaphoreLockGuard lock(d1l_i2c_mutex);
         if (!lock.isLocked()) {
             Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex in begin");
             delete ioExpander;
@@ -122,7 +122,7 @@ void TCA9535_GPIO::pinMode(uint16_t pin, uint8_t mode) {
 
     // Thread-safe I2C operation with RAII
     {
-        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        RecursiveSemaphoreLockGuard lock(d1l_i2c_mutex);
         if (!lock.isLocked()) {
             Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex in pinMode");
             return;
@@ -164,7 +164,7 @@ void TCA9535_GPIO::digitalWrite(uint16_t pin, uint8_t value) {
     // Thread-safe I2C operation with RAII
     bool writeSuccess = false;
     {
-        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        RecursiveSemaphoreLockGuard lock(d1l_i2c_mutex);
         if (!lock.isLocked()) {
             Serial.printf("[TCA9535] ERROR: Failed to acquire I2C mutex in digitalWrite (pin %u)\n", pin);
             return;
@@ -202,7 +202,7 @@ uint8_t TCA9535_GPIO::digitalRead(uint16_t pin) {
     // Thread-safe I2C operation with RAII
     uint8_t value = LOW;
     {
-        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        RecursiveSemaphoreLockGuard lock(d1l_i2c_mutex);
         if (!lock.isLocked()) {
             Serial.printf("[TCA9535] ERROR: Failed to acquire I2C mutex in digitalRead (pin %u)\n", pin);
             return LOW; // Safe default
@@ -227,7 +227,7 @@ uint16_t TCA9535_GPIO::readAllInputs() {
     // Thread-safe I2C operation with RAII
     uint16_t allInputs = 0x0000;
     {
-        SemaphoreLockGuard lock(d1l_i2c_mutex);
+        RecursiveSemaphoreLockGuard lock(d1l_i2c_mutex);
         if (!lock.isLocked()) {
             Serial.println("[TCA9535] ERROR: Failed to acquire I2C mutex in readAllInputs");
             return 0x0000; // Safe default (all LOW)
