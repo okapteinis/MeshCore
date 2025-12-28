@@ -1,3 +1,13 @@
+> **⚠️ D1L Display In Progress - Radio Functional**
+> This is a specialized fork of MeshCore focused on **SenseCAP Indicator D1L** support.
+> - **Status**: Radio (LoRa RX/TX) is fully functional
+> - **Display/Screen**: NOT currently operational (work in progress)
+> - **Development Timeline**: Active development resumes Q2 2026
+> - **Primary Branch**: `nightly` (all D1L-specific code and fixes)
+
+---
+
+
 ## About MeshCore
 
 MeshCore is a lightweight, portable C++ library that enables multi-hop packet routing for embedded projects using LoRa and other packet radios. It is designed for developers who want to create resilient, decentralized communication networks that work without the internet.
