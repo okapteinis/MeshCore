@@ -58,8 +58,12 @@ Hard resetting via RTS pin...
 pio device monitor --port /dev/cu.usbserial-1110 --baud 115200
 ```
 
-Or use the dedicated logger:
+Or use the dedicated logger (recommended - includes heartbeat and event filtering):
 ```bash
+# With explicit port
+python3 tools/d1l_logger.py --port /dev/cu.usbserial-1110
+
+# Auto-detect port (macOS/Linux)
 python3 tools/d1l_logger.py
 ```
 
@@ -260,10 +264,14 @@ private:
 public:
     explicit RecursiveSemaphoreLockGuard(SemaphoreHandle_t m) : mutex(m), locked(false) {
         if (mutex != NULL) {
+            // Use 5-second timeout to detect deadlocks
             if (xSemaphoreTakeRecursive(mutex, pdMS_TO_TICKS(5000)) == pdTRUE) {
                 locked = true;
             } else {
-                Serial.println("[CRITICAL] RecursiveSemaphoreLockGuard: Failed to acquire mutex!");
+                #ifdef ARDUINO
+                Serial.println("[CRITICAL] RecursiveSemaphoreLockGuard: Failed to acquire mutex within 5s timeout!");
+                Serial.println("[CRITICAL] Possible deadlock or priority inversion detected!");
+                #endif
             }
         }
     }

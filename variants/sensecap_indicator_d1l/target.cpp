@@ -133,9 +133,9 @@ void cleanup_all_resources(const char* reason) {
 }
 
 bool fail_and_cleanup(const char* error_msg) {
-  Serial.printf("FATAL: %s\n", error_msg);
+  log_e("FATAL: %s", error_msg);
   cleanup_all_resources(error_msg);
-  Serial.println("BOOT FAILED\n");
+  log_e("BOOT FAILED");
   return false;
 }
 
@@ -160,40 +160,36 @@ MomentaryButton user_btn(PIN_USER_BTN, INPUT_PULLUP, true);
 // ============================================================================
 
 bool initStorage() {
-  Serial.println("\nSPIFFS Initialization");
+  log_i("SPIFFS Initialization");
 
   if (SPIFFS.begin(false)) {
-    Serial.println("SPIFFS mounted (existing filesystem)");
+    log_i("SPIFFS mounted (existing filesystem)");
 
     size_t totalBytes = SPIFFS.totalBytes();
     size_t usedBytes = SPIFFS.usedBytes();
     size_t freeBytes = totalBytes - usedBytes;
 
-    Serial.printf("Total: %zu bytes (%.2f MB)\n", totalBytes, totalBytes / 1024.0 / 1024.0);
-    Serial.printf("Used:  %zu bytes (%.2f MB)\n", usedBytes, usedBytes / 1024.0 / 1024.0);
-    Serial.printf("Free:  %zu bytes (%.2f MB)\n", freeBytes, freeBytes / 1024.0 / 1024.0);
-    Serial.println();
+    log_i("Total: %zu bytes (%.2f MB)", totalBytes, totalBytes / 1024.0 / 1024.0);
+    log_i("Used:  %zu bytes (%.2f MB)", usedBytes, usedBytes / 1024.0 / 1024.0);
+    log_i("Free:  %zu bytes (%.2f MB)", freeBytes, freeBytes / 1024.0 / 1024.0);
     return true;
   }
 
-  Serial.println("SPIFFS mount failed");
+  log_w("SPIFFS mount failed");
 
 #ifdef SPIFFS_AUTO_FORMAT
-  Serial.println("Auto-format enabled - formatting...");
+  log_i("Auto-format enabled - formatting...");
   if (!SPIFFS.begin(true)) {
-    Serial.println("Format failed!");
-    Serial.println();
+    log_e("Format failed!");
     return false;
   }
-  Serial.println("SPIFFS formatted and mounted");
+  log_i("SPIFFS formatted and mounted");
 #else
-  Serial.println("Auto-format disabled");
-  Serial.println("To enable: add -D SPIFFS_AUTO_FORMAT=1");
-  Serial.println();
+  log_w("Auto-format disabled");
+  log_i("To enable: add -D SPIFFS_AUTO_FORMAT=1");
   return false;
 #endif
 
-  Serial.println();
   return true;
 }
 
