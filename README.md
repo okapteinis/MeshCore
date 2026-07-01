@@ -1,125 +1,120 @@
-> **⚠️ D1L Display In Progress - Radio Functional**
-> This is a specialized fork of MeshCore focused on **SenseCAP Indicator D1L** support.
-> - **Status**: Radio (LoRa RX/TX) is fully functional
-> - **Display/Screen**: NOT currently operational (work in progress)
-> - **Development Timeline**: Active development resumes Q2 2026
-> - **Primary Branch**: `nightly` (all D1L-specific code and fixes)
+# MeshCore — SenseCAP Indicator D1L fork
+
+> **Specialised fork of [MeshCore](https://github.com/meshcore-dev/MeshCore) focused on SenseCAP Indicator D1L support.**
+> - **Radio (LoRa RX/TX):** fully functional — SX1262 driver stable, EU NARROW (869.618 MHz), repeater mode validated on hardware.
+> - **Display (ILI9341 / touch):** work in progress — not yet operational.
+> - **Primary branch:** `nightly` (all D1L-specific code and fixes live here).
+
+MeshCore is a lightweight, portable C++ library for embedded systems that enables **multi-hop packet routing** over LoRa and other packet radios. It targets resilient, decentralised networks that work without internet infrastructure — off-grid, emergency, tactical, and remote-sensor scenarios. Compared to Meshtastic it gives lower-level control; compared to Reticulum it stays simpler and lighter, aimed at constrained embedded targets (ESP32, nRF52, RP2040).
+
+This fork adds and maintains board support beyond upstream — most notably the **SenseCAP Indicator D1L** (with a custom IO-expander HAL) plus additional ThinkNode and RAK variants.
 
 ---
 
+## Software
 
-## About MeshCore
+The "software" side is the platform-agnostic mesh library plus the host-side tooling used to build, flash, and observe devices.
 
-MeshCore is a lightweight, portable C++ library that enables multi-hop packet routing for embedded projects using LoRa and other packet radios. It is designed for developers who want to create resilient, decentralized communication networks that work without the internet.
+### Core library (`src/`)
 
-## 🔍 What is MeshCore?
+Platform-independent mesh logic, portable across all supported boards:
 
-MeshCore now supports a range of LoRa devices, allowing for easy flashing without the need to compile firmware manually. Users can flash a pre-built binary using tools like Adafruit ESPTool and interact with the network through a serial console.
-MeshCore provides the ability to create wireless mesh networks, similar to Meshtastic and Reticulum but with a focus on lightweight multi-hop packet routing for embedded projects. Unlike Meshtastic, which is tailored for casual LoRa communication, or Reticulum, which offers advanced networking, MeshCore balances simplicity with scalability, making it ideal for custom embedded solutions., where devices (nodes) can communicate over long distances by relaying messages through intermediate nodes. This is especially useful in off-grid, emergency, or tactical situations where traditional communication infrastructure is unavailable.
+| File | Responsibility |
+|------|----------------|
+| `MeshCore.h` | Main public API + buffer-size macros (`MAX_PACKET_PAYLOAD`, `MAX_PATH_SIZE`) |
+| `Mesh.h/.cpp` | Multi-hop routing logic |
+| `Dispatcher.h/.cpp` | Packet reception + dispatch |
+| `Packet.h/.cpp` | Wire-format packet structure + (de)serialisation |
+| `Identity.h/.cpp` | Node identity + Curve25519 keys |
+| `helpers/` | Platform helpers — `ui/` display drivers, `bridges/`, `radiolib/`, per-arch board classes |
 
-## ⚡ Key Features
+**Protocol at a glance** (full spec in [`docs/packet_structure.md`](./docs/packet_structure.md) / [`docs/payloads.md`](./docs/payloads.md)):
 
-* Multi-Hop Packet Routing
-  * Devices can forward messages across multiple nodes, extending range beyond a single radio's reach.
-  * Supports up to a configurable number of hops to balance network efficiency and prevent excessive traffic.
-  * Nodes use fixed roles where "Companion" nodes are not repeating messages at all to prevent adverse routing paths from being used.
-* Supports LoRa Radios – Works with Heltec, RAK Wireless, and other LoRa-based hardware.
-* Decentralized & Resilient – No central server or internet required; the network is self-healing.
-* Low Power Consumption – Ideal for battery-powered or solar-powered devices.
-* Simple to Deploy – Pre-built example applications make it easy to get started.
+- **Max packet:** 255 bytes total (≤184 bytes payload). Layout: `[Header(1)][TransportCodes(4,opt)][PathLen(1)][Path(0–64)][Payload]`.
+- **Route types:** flood, flood+transport-codes, direct, direct+transport-codes. Companion nodes never re-transmit (loop prevention). Configurable hop limit (~15 default).
+- **Security:** AES-256-CTR payload encryption, ECDH (Curve25519) key agreement, HMAC authentication; node IDs are hashed (no plaintext identifiers). Distributed trust, no central PKI.
 
-## 🎯 What Can You Use MeshCore For?
+### Host tooling
 
-* Off-Grid Communication: Stay connected even in remote areas.
-* Emergency Response & Disaster Recovery: Set up instant networks where infrastructure is down.
-* Outdoor Activities: Hiking, camping, and adventure racing communication.
-* Tactical & Security Applications: Military, law enforcement, and private security use cases.
-* IoT & Sensor Networks: Collect data from remote sensors and relay it back to a central location.
+| Tool | Purpose |
+|------|---------|
+| `tools/d1l_logger.py` | Serial logger with heartbeat + event filtering and VID-based auto-detection of the D1L serial port. More reliable than the raw monitor for long captures. |
+| PlatformIO | Build system for every firmware target (`pio run -e <env>`). `build.sh` wraps common multi-target builds. |
+| `pio device monitor` | Standard serial console (115200 baud). |
 
-## 🚀 How to Get Started
+```bash
+# Recommended D1L monitor (auto-detect port, macOS/Linux):
+python3 tools/d1l_logger.py
+# or an explicit port + custom log dir:
+python3 tools/d1l_logger.py --port /dev/cu.usbserial-XXXX --log-dir ./logs
+```
 
-- Watch the [MeshCore Intro Video](https://www.youtube.com/watch?v=t1qne8uJBAc) by Andy Kirby.
-- Read through our [Frequently Asked Questions](./docs/faq.md) section.
-- Flash the MeshCore firmware on a supported device.
-- Connect with a supported client.
+### Dependencies
 
-For developers;
+| Library | Version | Purpose |
+|---------|---------|---------|
+| RadioLib | ^7.3.0 | LoRa / SX1262 control (critical) |
+| Crypto (rweather) | ^0.4.0 | AES-256, ECDH |
+| RTClib (Adafruit) | ^2.1.3 | RTC / timestamps |
+| Melopero RV3028 | ^1.1.0 | RTC device driver |
+| CayenneLPP | 1.6.1 | Sensor-data encoding |
+| LovyanGFX | — | Display driver (D1L variant) |
 
-- Install [PlatformIO](https://docs.platformio.org) in [Visual Studio Code](https://code.visualstudio.com).
-- Clone and open the MeshCore repository in Visual Studio Code.
-- See the example applications you can modify and run:
-  - [Companion Radio](./examples/companion_radio) - For use with an external chat app, over BLE, USB or WiFi.
-  - [Simple Repeater](./examples/simple_repeater) - Extends network coverage by relaying messages.
-  - [Simple Room Server](./examples/simple_room_server) - A simple BBS server for shared Posts.
-  - [Simple Secure Chat](./examples/simple_secure_chat) - Secure terminal based text communication between devices.
+Framework: Arduino (PlatformIO) + FreeRTOS (ESP32) + SPIFFS config storage.
 
-The Simple Secure Chat example can be interacted with through the Serial Monitor in Visual Studio Code, or with a Serial USB Terminal on Android.
+---
 
-## ⚡️ MeshCore Flasher
+## Firmware
 
-We have prebuilt firmware ready to flash on supported devices.
+The "firmware" side is what actually runs on a device: a role-specific application built for a specific board variant.
 
-- Launch https://flasher.meshcore.co.uk
-- Select a supported device
-- Flash one of the firmware types:
-  - Companion, Repeater or Room Server
-- Once flashing is complete, you can connect with one of the MeshCore clients below.
+### Firmware roles
 
-## 📱 MeshCore Clients
+- **Companion radio** — pairs with a phone/desktop client over BLE, USB, or WiFi.
+- **Repeater** — standalone packet forwarding to extend coverage (validated role on D1L).
+- **Room server** — simple message/BBS server with ACL support.
 
-**Companion Firmware**
+### Supported boards (this fork)
 
-The companion firmware can be connected to via BLE, USB or WiFi depending on the firmware type you flashed.
+- **`sensecap_indicator_d1l` — primary.** ESP32-S3, 8 MB flash + 8 MB OPI PSRAM, Semtech SX1262, TCA9535 IO expander for radio-control pins, 480×480 touch TFT, optional RP2040 sensor co-processor.
+- **`thinknode_m3`, `thinknode_m6`** (nRF52), **`rak11310`** (RP2040), **`nibble_screen_connect`** — additional variants added by this fork.
+- Secondary/upstream boards (Heltec v3/v4, Ebyte EoRa S3, RAK, generic E22) remain available.
 
-- Web: https://app.meshcore.nz
-- Android: https://play.google.com/store/apps/details?id=com.liamcottle.meshcore.android
-- iOS: https://apps.apple.com/us/app/meshcore/id6742354151?platform=iphone
-- NodeJS: https://github.com/liamcottle/meshcore.js
-- Python: https://github.com/fdlamotte/meshcore-cli
+### SenseCAP Indicator D1L — status
 
-**Repeater and Room Server Firmware**
+**Working:**
+- Custom HAL: `hal/TCA9535_GPIO` (IO-expander GPIO), `hal/CustomRadioLibHal` (RadioLib GODMODE HAL), virtual-pin routing (100–199 → TCA9535, 0–99 → ESP32 GPIO), FreeRTOS interrupt-servicing task.
+- EU NARROW radio profile: 869.618 MHz, BW 62.5 kHz, SF 8, CR 8/5.
+- Runtime configuration via serial CLI with SPIFFS persistence (no hardcoded credentials).
+- Hardware-stability fixes, including a **recursive** `d1l_i2c_mutex` — required because `CustomRadioLibHal::attachInterrupt()` nests into `TCA9535_GPIO::digitalRead()`; a non-recursive mutex deadlocks and kills RX. **Do not change this mutex to non-recursive.**
 
-The repeater and room server firmwares can be setup via USB in the web config tool.
+**In progress / not yet done:** ILI9341 display driver, RP2040 sensor readout, TCA9535 interrupt-driven (vs polled) INT handling, on-hardware validation of secondary variants, OTA updates.
 
-- https://config.meshcore.dev
+### Build & flash
 
-They can also be managed via LoRa in the mobile app by using the Remote Management feature.
+```bash
+# D1L repeater (validated target):
+pio run -e SenseCapIndicator-D1L_repeater
+pio run -e SenseCapIndicator-D1L_repeater -t upload --upload-port /dev/cu.usbserial-XXXX
+# List target port: ls /dev/cu.usbserial-*
+```
 
-## 🛠 Hardware Compatibility
+Prebuilt upstream firmware for many other boards is available via the [MeshCore Flasher](https://flasher.meshcore.co.uk) and clients at [app.meshcore.nz](https://app.meshcore.nz) (config tool: [config.meshcore.dev](https://config.meshcore.dev)).
 
-MeshCore is designed for devices listed in the [MeshCore Flasher](https://flasher.meshcore.co.uk)
+---
 
-## 📜 License
+## Contributing & coding standards
 
-MeshCore is open-source software released under the MIT License. You are free to use, modify, and distribute it for personal and commercial projects.
+This fork follows upstream's embedded discipline — read before submitting a PR:
 
-## Contributing
+- **No dynamic memory allocation** (`new`/`malloc`/`delete`/`free`) outside `setup()`/`begin()`. Use fixed/stack buffers; heap fragmentation crashes long-running nodes.
+- **Do not retroactively reformat existing code.** `.clang-format` is for *new* code only; reformatting existing files creates noise diffs that hide real changes. Match the surrounding brace/indent style (2-space, K&R, 110-col, `#pragma once`).
+- Compile clean under `-Wall -Wextra`; every included header must be used.
+- Keep it embedded-simple: no unnecessary layers, comment *why* not *what*, measure before optimising.
+- PRs on this fork base off `nightly`.
 
-Please submit PR's using 'dev' as the base branch!
-For minor changes just submit your PR and I'll try to review it, but for anything more 'impactful' please open an Issue first and start a discussion. Is better to sound out what it is you want to achieve first, and try to come to a consensus on what the best approach is, especially when it impacts the structure or architecture of this codebase.
+---
 
-Here are some general principals you should try to adhere to:
-* Keep it simple. Please, don't think like a high-level lang programmer. Think embedded, and keep code concise, without any unecessary layers.
-* No dynamic memory allocation, except during setup/begin functions.
-* Use the same brace and indenting style that's in the core source modules. (A .clang-format is prob going to be added soon, but please do NOT retroactively re-format existing code. This just creates unnecessary diffs that make finding problems harder)
+## License & credits
 
-## Road-Map / To-Do
-
-There are a number of fairly major features in the pipeline, with no particular time-frames attached yet. In very rough chronological order:
-- [X] Companion radio: UI redesign
-- [X] Repeater + Room Server: add ACL's (like Sensor Node has)
-- [X] Standardise Bridge mode for repeaters
-- [ ] Repeater/Bridge: Standardise the Transport Codes for zoning/filtering
-- [X] Core + Repeater: enhanced zero-hop neighbour discovery
-- [ ] Core: round-trip manual path support
-- [ ] Companion + Apps: support for multiple sub-meshes (and 'off-grid' client repeat mode)
-- [ ] Core + Apps: support for LZW message compression
-- [ ] Core: dynamic CR (Coding Rate) for weak vs strong hops
-- [ ] Core: new framework for hosting multiple virtual nodes on one physical device
-- [ ] V2 protocol spec: discussion and concensus around V2 packet protocol, including path hashes, new encryption specs, etc
-
-## 📞 Get Support
-
-- Report bugs and request features on the [GitHub Issues](https://github.com/ripplebiz/MeshCore/issues) page.
-- Find additional guides and components on [my site](https://buymeacoffee.com/ripplebiz).
-- Join [MeshCore Discord](https://discord.gg/BMwCtwHj5V) to chat with the developers and get help from the community.
+MIT License (see [`license.txt`](./license.txt)). MeshCore is created and maintained upstream at [meshcore-dev/MeshCore](https://github.com/meshcore-dev/MeshCore); this is a downstream fork adding SenseCAP Indicator D1L and related board support. Community: [MeshCore Discord](https://discord.gg/BMwCtwHj5V).
