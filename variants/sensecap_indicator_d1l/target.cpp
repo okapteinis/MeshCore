@@ -38,9 +38,6 @@ namespace Config {
 
   // I2C
   constexpr uint32_t I2C_MUTEX_TIMEOUT_MS = 1000;
-
-  // SPIFFS
-  constexpr size_t JPEG_HEADER_SIZE = 3;
 }
 
 // JPEG Constants
@@ -257,27 +254,7 @@ bool radio_init() {
   // Serial is already initialized in main.cpp before calling this function
   // No need to reinitialize here - it would break the UART0 pin mapping
 
-  // Serial.println("========================================");  // REMOVED
-  // Serial.println("RADIO INIT START");  // REMOVED
-  // Serial.println("========================================");  // REMOVED
-
-  /* PSRAM checks disabled for D1L
-  Serial.printf("PSRAM size: %u bytes\n", ESP.getPsramSize());
-  Serial.printf("PSRAM free: %u bytes\n", ESP.getFreePsram());
-
-  if (ESP.getPsramSize() == 0) {
-    Serial.println("CRITICAL: PSRAM NOT DETECTED!");
-    Serial.println("Display may fail or use fallback mode!");
-  } else {
-    Serial.printf("PSRAM: %.2f MB total, %.2f MB free\n",
-                  ESP.getPsramSize() / 1024.0 / 1024.0,
-                  ESP.getFreePsram() / 1024.0 / 1024.0);
-  }
-  */
-
-  // Serial.printf("CPU: %u MHz\n", ESP.getCpuFreqMHz());  // REMOVED
-  // Serial.printf("Flash: %u bytes\n", ESP.getFlashChipSize());  // REMOVED
-  // Serial.println("========================================\n");  // REMOVED
+  // NOTE: PSRAM diagnostics intentionally disabled for D1L
 
   // Initialize I2C Mutex
   if (i2c_bus_mutex == nullptr) {
@@ -285,20 +262,12 @@ bool radio_init() {
     if (i2c_bus_mutex == nullptr) {
       return fail_and_cleanup("Failed to create I2C mutex");
     }
-    // Serial.println("I2C bus mutex created");  // REMOVED
   }
 
-  // SPIFFS Storage Test
-  // Serial.println("\n========================================");  // REMOVED
-  // Serial.println("Phase 0A: SPIFFS Storage Test");  // REMOVED
-  // Serial.println("========================================");  // REMOVED
-  if (!initStorage()) {
-    // Serial.println("SPIFFS init failed - continuing anyway");  // REMOVED
-  } else {
-    // Serial.println("SPIFFS initialized");  // REMOVED
+  // SPIFFS Storage Test (non-fatal: map features degrade gracefully if unavailable)
+  if (initStorage()) {
     testMapAccess();
   }
-  // Serial.println("========================================\n");  // REMOVED
 
   // Initialize Clocks
   fallback_clock.begin();
@@ -309,7 +278,7 @@ bool radio_init() {
 #if RADIO_DRIVER_AVAILABLE
   // Initialize HAL
 #ifdef USE_CUSTOM_RADIOLIB_HAL
-  // Serial.println("\nInitializing TCA9535 HAL");  // REMOVED - causes crash
+  // NOTE: do not emit Serial output in this window — early prints here crash the D1L
 
   {
     I2C_Lock lock;
@@ -321,22 +290,17 @@ bool radio_init() {
       return fail_and_cleanup("I2C initialization failed");
     }
   }
-  // Serial.printf("I2C: SDA=%d, SCL=%d, Freq=%u Hz\n",
-  //               PIN_BOARD_SDA, PIN_BOARD_SCL, TCA9535_I2C_FREQ);  // REMOVED
 
   // STEP 1: Create TCA9535_GPIO object (just construct, don't call begin() yet)
   gpio_expander = new TCA9535_GPIO(TCA9535_I2C_ADDR);
 
   // Initialize SPI (needed before HAL creation)
-  // Serial.println("\nInitializing SPI Bus");  // REMOVED
   spi.begin(LORA_SCK, LORA_MISO, LORA_MOSI);
-  // Serial.printf("SPI: SCK=%d, MISO=%d, MOSI=%d\n", LORA_SCK, LORA_MISO, LORA_MOSI);  // REMOVED
 
   // STEP 2: Create CustomRadioLibHal (this creates the global I2C mutex)
   SPISettings spiSettings(2000000, MSBFIRST, SPI_MODE0);
   custom_hal = new CustomRadioLibHal(gpio_expander, spi, spiSettings);
   custom_hal->init();
-  // Serial.println("HAL initialized with SPI settings");  // REMOVED
 
   // STEP 3: NOW initialize TCA9535 (mutex exists now!)
   {
@@ -349,25 +313,12 @@ bool radio_init() {
       return fail_and_cleanup("TCA9535 init failed");
     }
   }
-  // Serial.printf("TCA9535 at I2C 0x%02X\n", TCA9535_I2C_ADDR);  // REMOVED
-  // Serial.println();  // REMOVED
 
 #else
-  // Serial.println("WARNING: USE_CUSTOM_RADIOLIB_HAL not defined!");  // REMOVED
-  // Serial.println("Radio will likely fail without HAL!\n");  // REMOVED
+  // (no custom HAL compiled in: radio init uses the standard RadioLib HAL)
 #endif
 
   // Initialize Radio
-  // Serial.println("\nInitializing SX1262 Radio");  // REMOVED
-  // Serial.printf("  SPI pins (direct): SCK=%d, MISO=%d, MOSI=%d\n",
-  //               LORA_SCK, LORA_MISO, LORA_MOSI);  // REMOVED
-  // Serial.printf("  Control pins (virtual): CS=%d, DIO1=%d, RST=%d, BUSY=%d\n",
-  //               TCA9535_GPIO::LORA_NSS, TCA9535_GPIO::LORA_DIO1,
-  //               TCA9535_GPIO::LORA_RESET, TCA9535_GPIO::LORA_DIO0);  // REMOVED
-#ifdef USE_CUSTOM_RADIOLIB_HAL
-  // Serial.printf("  TCA9535 I2C: 0x%02X\n", TCA9535_I2C_ADDR);  // REMOVED
-#endif
-
   if (radio == nullptr) {
 #ifdef USE_CUSTOM_RADIOLIB_HAL
     // Create module with custom HAL (HAL pointer is first argument!)
