@@ -28,6 +28,10 @@ Platform-independent mesh logic, portable across all supported boards:
 | `Identity.h/.cpp` | Node identity + Curve25519 keys |
 | `helpers/` | Platform helpers — `ui/` display drivers, `bridges/`, `radiolib/`, per-arch board classes |
 
+Selected `helpers/` building blocks worth knowing about: `CommonCLI.h/.cpp` (the serial/BLE command parser shared by every firmware role — admin password, radio params, node config, `erase`/`reboot`), `ClientACL.h/.cpp` (per-contact access control for repeaters/room servers), `IdentityStore.h/.cpp` (private-key persistence), `BaseChatMesh.h/.cpp` (shared companion/room-server messaging logic), and the per-architecture board classes (`ESP32Board`, `NRF52Board`) that each variant's HAL builds on.
+
+**Testing:** a `native_test` PlatformIO environment (`platform = native`, Unity framework, host-compiled — no hardware needed) is scaffolded for host-side coverage of BLE command-validation logic (`test/ble_handler/test_ble_commands.cpp`, see its own `README.md` for the 12 covered cases). **Currently not runnable as committed** — `pio test -e native_test` errors with `Nothing to build` (live-verified 2026-08-23); the test's own README documents a `test_build_src = yes` line that isn't present in the root `platformio.ini`'s `[env:native_test]` block, and that alone may not be sufficient to fix PlatformIO's test discovery. Not yet wired into CI.
+
 **Protocol at a glance** (full spec in [`docs/packet_structure.md`](./docs/packet_structure.md) / [`docs/payloads.md`](./docs/payloads.md)):
 
 - **Max packet:** 255 bytes total (≤184 bytes payload). Layout: `[Header(1)][TransportCodes(4,opt)][PathLen(1)][Path(0–64)][Payload]`.
@@ -70,15 +74,21 @@ The "firmware" side is what actually runs on a device: a role-specific applicati
 
 ### Firmware roles
 
-- **Companion radio** — pairs with a phone/desktop client over BLE, USB, or WiFi.
-- **Repeater** — standalone packet forwarding to extend coverage (validated role on D1L).
-- **Room server** — simple message/BBS server with ACL support.
+Each role is a separate buildable application in `examples/`, sharing the same `src/` mesh library:
 
-### Supported boards (this fork)
+| Role | Source | Description |
+|------|--------|--------------|
+| **Companion radio** | (per-board environments) | Pairs with a phone/desktop client over BLE, USB, or WiFi — messaging, contacts, channels. |
+| **Repeater** | `examples/simple_repeater/` | Standalone packet forwarding to extend coverage. The validated role on D1L. |
+| **Room server** | `examples/simple_room_server/` | Simple message/BBS server with `ClientACL`-based access control. |
+| **Secure chat** | `examples/simple_secure_chat/` | Reference end-to-end encrypted chat implementation. |
+| **Sensor node** | `examples/simple_sensor/` | Reads and advertises sensor data (CayenneLPP-encoded) over the mesh. |
 
-- **`sensecap_indicator_d1l` — primary.** ESP32-S3, 8 MB flash + 8 MB OPI PSRAM, Semtech SX1262, TCA9535 IO expander for radio-control pins, 480×480 touch TFT, optional RP2040 sensor co-processor.
+### Supported boards
+
+- **`sensecap_indicator_d1l` — primary, this fork's focus.** ESP32-S3, 8 MB flash + 8 MB OPI PSRAM, Semtech SX1262, TCA9535 IO expander for radio-control pins, 480×480 touch TFT, optional RP2040 sensor co-processor.
 - **`thinknode_m3`, `thinknode_m6`** (nRF52), **`rak11310`** (RP2040), **`nibble_screen_connect`** — additional variants added by this fork.
-- Secondary/upstream boards (Heltec v3/v4, Ebyte EoRa S3, RAK, generic E22) remain available.
+- **63 board variants total** live under `variants/` (this fork's additions plus everything inherited from upstream) — ESP32 (Heltec v2/v3/v4, LilyGo T-Beam/T-Deck/T-Echo/T-Lora, XIAO, WioTracker, Ebyte EoRa S3, generic E22, and more), nRF52 (RAK4631, XIAO nRF52, ikoka handheld/nano/stick), and RP2040 (Waveshare, RAK11310, Raspberry Pi Pico W) targets. Each variant carries its own `platformio.ini` defining its buildable role×radio environment combinations (`pio run -e <variant>_<role>` — see that variant's directory for the exact environment names, e.g. `SenseCapIndicator-D1L_repeater`).
 
 ### SenseCAP Indicator D1L — status
 
