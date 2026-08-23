@@ -101,6 +101,8 @@ pio run -e SenseCapIndicator-D1L_repeater -t upload --upload-port /dev/cu.usbser
 
 Prebuilt upstream firmware for many other boards is available via the [MeshCore Flasher](https://flasher.meshcore.co.uk) and clients at [app.meshcore.nz](https://app.meshcore.nz) (config tool: [config.meshcore.dev](https://config.meshcore.dev)).
 
+**Full D1L walkthrough — flashing, upload troubleshooting (including a transient port-reenumeration race), Serial CLI reference, and admin-password setup/recovery — see [`docs/hardware/D1L_GUIDE.md`](./docs/hardware/D1L_GUIDE.md).**
+
 ---
 
 ## Contributing & coding standards
