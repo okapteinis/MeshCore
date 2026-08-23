@@ -119,7 +119,36 @@ advert             # Send advertisement packet
 help               # List all commands
 ```
 
+### Admin Password
+
+- **Default password:** `password` (set on first boot / after a filesystem erase — see [MeshCore FAQ 3.3](../faq.md)).
+- **Change it:** `password <new-password>` over the serial console.
+- **Buffer limit — 15 characters, silently truncated:** `_prefs.password` is declared `char password[16]` (`src/helpers/CommonCLI.h`). Anything longer than 15 characters is cut off with **no warning or error** — the device just stores the truncated prefix. Keep new admin passwords to 15 characters or fewer.
+- **Forgot the password? You do NOT need to erase the device.** Local USB serial is unconditionally trusted — the serial console calls `handleCommand(0, ...)` for every command with no login/authentication step at all (`examples/simple_repeater/main.cpp`, comment: *"there is no sender_timestamp via serial"*). This is different from remote access (BLE / mesh), which does require a successful login first. So with the device connected over USB, just run `password <new-password>` directly — no old password needed, and the private key / mesh identity is completely untouched.
+  - The `erase` CLI command (also serial-only, unauthenticated) is a **last resort** — it formats the whole filesystem, wiping the password back to default AND generating a brand-new private key/mesh identity. Only use it if you actually want a fresh identity; for a forgotten password alone, `password <new-password>` is the correct fix.
+
 ### Troubleshooting
+
+#### Upload fails mid-erase with "Could not open /dev/cu.usbserial-XXXX, the port doesn't exist"
+
+This can happen even when `ls /dev/cu.usbserial-*` showed the device seconds earlier and `pio device list` still finds it afterward — a transient USB serial re-enumeration race (the port node briefly disappears and reappears, sometimes under a slightly different number, e.g. `-110` → `-1110`) that lands right at `esptool`'s erase/write stage. **Retry the exact same upload command** — a race, not a hardware fault, and it typically succeeds on the next attempt. If it doesn't:
+1. Re-check the current port name (`ls /dev/cu.usb*`) — it may have changed.
+2. Unplug and replug the USB cable, wait a couple of seconds, then retry.
+3. If it still fails, try a different USB port/cable per the "Device not found" section below.
+
+#### `pio device monitor` errors with `termios.error: (19, 'Operation not supported by device')`
+
+`pio device monitor` (and its underlying `miniterm`) needs an interactive controlling terminal — it will fail with this error if run in the background, from a non-interactive shell, or piped/redirected. Use it only from a real interactive terminal session. For scripted/automated serial capture (no TTY available), use `tools/d1l_logger.py` instead, or read the port directly with `pyserial`:
+```python
+import serial, time
+ser = serial.Serial('/dev/cu.usbserial-XXXX', 115200, timeout=1)
+end = time.time() + 12
+buf = b""
+while time.time() < end:
+    buf += ser.read(4096)
+ser.close()
+print(buf.decode(errors='replace'))
+```
 
 #### "Device not found" error
 ```bash
@@ -451,6 +480,6 @@ This is unique to the D1L variant - other boards with direct GPIO access to LoRa
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** 2025-12-28
+**Document Version:** 1.1
+**Last Updated:** 2026-08-23 (added Admin Password section + the port-race and headless-monitor troubleshooting entries)
 **Maintainer:** MeshCore Community
